@@ -1,7 +1,6 @@
 """Unit tests for MCP tool implementations."""
 
 from datetime import UTC, datetime
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -81,18 +80,12 @@ def test_health_check_returns_ok() -> None:
     assert result == {"status": "ok"}
 
 
-def _make_mock_client(response_data: Any) -> MagicMock:
-    """Return a mock TvdbClient whose get() returns response_data."""
-    mock_client = MagicMock()
-    mock_client.get = AsyncMock(return_value=response_data)
-    return mock_client
-
-
 @pytest.mark.asyncio
 async def test_tvdb_get_series_returns_data_dict() -> None:
     """tvdb_get_series returns the data dict from the TVDB response."""
     series_data = {"id": 78804, "name": "Doctor Who", "slug": "doctor-who"}
-    mock_client = _make_mock_client({"data": series_data, "status": "success"})
+    mock_client = MagicMock()
+    mock_client.get_series = AsyncMock(return_value=series_data)
 
     with patch.object(tools_module, "_client", mock_client):
         result = await tvdb_get_series(series_id=78804)
@@ -101,40 +94,43 @@ async def test_tvdb_get_series_returns_data_dict() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tvdb_get_series_passes_correct_id_in_path() -> None:
-    """tvdb_get_series includes the series ID in the request path."""
-    mock_client = _make_mock_client({"data": {"id": 12345}, "status": "success"})
+async def test_tvdb_get_series_passes_correct_id() -> None:
+    """tvdb_get_series passes the series ID to the client."""
+    mock_client = MagicMock()
+    mock_client.get_series = AsyncMock(return_value={"id": 12345})
 
     with patch.object(tools_module, "_client", mock_client):
         await tvdb_get_series(series_id=12345)
 
-    mock_client.get.assert_awaited_once_with("/series/12345")
+    mock_client.get_series.assert_awaited_once_with(12345)
 
 
 @pytest.mark.asyncio
 async def test_tvdb_get_series_naming_bundle_mode1_returns_series_dict() -> None:
     """Mode 1: returns the series dict when season_type is omitted."""
     series_data = {"id": 78804, "name": "Doctor Who"}
-    mock_client = _make_mock_client({"data": series_data, "status": "success"})
+    mock_client = MagicMock()
+    mock_client.get_series = AsyncMock(return_value=series_data)
 
     with patch.object(tools_module, "_client", mock_client):
         result = await tvdb_get_series_naming_bundle(series_id=78804)
 
     assert result == series_data
-    mock_client.get.assert_awaited_once_with("/series/78804")
+    mock_client.get_series.assert_awaited_once_with(78804)
 
 
 @pytest.mark.asyncio
 async def test_tvdb_get_series_naming_bundle_mode1_ignores_lang() -> None:
     """Mode 1: lang is ignored when season_type is omitted."""
     series_data = {"id": 78804, "name": "Doctor Who"}
-    mock_client = _make_mock_client({"data": series_data, "status": "success"})
+    mock_client = MagicMock()
+    mock_client.get_series = AsyncMock(return_value=series_data)
 
     with patch.object(tools_module, "_client", mock_client):
         result = await tvdb_get_series_naming_bundle(series_id=78804, lang="eng")
 
     assert result == series_data
-    mock_client.get.assert_awaited_once_with("/series/78804")
+    mock_client.get_series.assert_awaited_once_with(78804)
 
 
 @pytest.mark.asyncio
@@ -160,10 +156,10 @@ async def test_tvdb_get_series_naming_bundle_mode2_single_page() -> None:
     }
     # First call returns episodes, second call returns empty to stop pagination.
     mock_client = MagicMock()
-    mock_client.get = AsyncMock(
+    mock_client.get_series_episodes = AsyncMock(
         side_effect=[
-            {"data": {"episodes": [ep1, ep2]}},
-            {"data": {"episodes": []}},
+            {"episodes": [ep1, ep2]},
+            {"episodes": []},
         ]
     )
 
@@ -208,11 +204,11 @@ async def test_tvdb_get_series_naming_bundle_mode2_multi_page() -> None:
         "overview": "Yet another overview",
     }
     mock_client = MagicMock()
-    mock_client.get = AsyncMock(
+    mock_client.get_series_episodes = AsyncMock(
         side_effect=[
-            {"data": {"episodes": [ep1, ep2]}},
-            {"data": {"episodes": [ep3]}},
-            {"data": {"episodes": []}},
+            {"episodes": [ep1, ep2]},
+            {"episodes": [ep3]},
+            {"episodes": []},
         ]
     )
 
@@ -225,25 +221,25 @@ async def test_tvdb_get_series_naming_bundle_mode2_multi_page() -> None:
         {"aired": "2020-01-15", "number": 3, "seasonNumber": 1},
     ]
     assert result == expected
-    assert mock_client.get.await_count == 3
+    assert mock_client.get_series_episodes.await_count == 3
 
 
 @pytest.mark.asyncio
-async def test_tvdb_get_series_naming_bundle_mode3_includes_lang_in_path() -> None:
-    """Mode 3: language code is included in the request path."""
+async def test_tvdb_get_series_naming_bundle_mode3_includes_lang() -> None:
+    """Mode 3: language code is passed to the client."""
     mock_client = MagicMock()
-    mock_client.get = AsyncMock(
+    mock_client.get_series_episodes = AsyncMock(
         side_effect=[
-            {"data": {"episodes": [{"id": 1}]}},
-            {"data": {"episodes": []}},
+            {"episodes": [{"id": 1}]},
+            {"episodes": []},
         ]
     )
 
     with patch.object(tools_module, "_client", mock_client):
         await tvdb_get_series_naming_bundle(series_id=200, season_type="official", lang="eng")
 
-    first_call_path = mock_client.get.call_args_list[0][0][0]
-    assert first_call_path == "/series/200/episodes/official/eng"
+    _, kwargs = mock_client.get_series_episodes.call_args_list[0]
+    assert kwargs["lang"] == "eng"
 
 
 @pytest.mark.asyncio
@@ -263,10 +259,10 @@ async def test_tvdb_get_series_naming_bundle_strips_extra_fields() -> None:
         "status": "aired",
     }
     mock_client = MagicMock()
-    mock_client.get = AsyncMock(
+    mock_client.get_series_episodes = AsyncMock(
         side_effect=[
-            {"data": {"episodes": [episode_with_many_fields]}},
-            {"data": {"episodes": []}},
+            {"episodes": [episode_with_many_fields]},
+            {"episodes": []},
         ]
     )
 
@@ -280,9 +276,10 @@ async def test_tvdb_get_series_naming_bundle_strips_extra_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_tvdb_search_series_returns_results() -> None:
-    """tvdb_search_series returns the list from the data field."""
+    """tvdb_search_series returns the list from the TVDB response."""
     series_list = [{"tvdb_id": "1", "name": "Breaking Bad"}]
-    mock_client = _make_mock_client({"data": series_list, "status": "success"})
+    mock_client = MagicMock()
+    mock_client.search = AsyncMock(return_value=series_list)
 
     with patch.object(tools_module, "_client", mock_client):
         result = await tvdb_search_series(query="Breaking Bad")
@@ -291,9 +288,10 @@ async def test_tvdb_search_series_returns_results() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tvdb_search_series_returns_empty_list_when_data_empty() -> None:
-    """tvdb_search_series returns an empty list when data is empty."""
-    mock_client = _make_mock_client({"data": [], "status": "success"})
+async def test_tvdb_search_series_returns_empty_list() -> None:
+    """tvdb_search_series returns an empty list when no results."""
+    mock_client = MagicMock()
+    mock_client.search = AsyncMock(return_value=[])
 
     with patch.object(tools_module, "_client", mock_client):
         result = await tvdb_search_series(query="Nonexistent Series")
@@ -304,38 +302,38 @@ async def test_tvdb_search_series_returns_empty_list_when_data_empty() -> None:
 @pytest.mark.asyncio
 async def test_tvdb_search_series_omits_year_when_not_provided() -> None:
     """tvdb_search_series does not include year param when year is None."""
-    mock_client = _make_mock_client({"data": []})
+    mock_client = MagicMock()
+    mock_client.search = AsyncMock(return_value=[])
 
     with patch.object(tools_module, "_client", mock_client):
         await tvdb_search_series(query="Firefly")
 
-    call_kwargs = mock_client.get.call_args
-    params = call_kwargs[1]["params"] if call_kwargs[1] else call_kwargs[0][1]
-    assert "year" not in params
+    _, kwargs = mock_client.search.call_args
+    assert kwargs["year"] is None
 
 
 @pytest.mark.asyncio
 async def test_tvdb_search_series_includes_year_when_provided() -> None:
     """tvdb_search_series includes year param when year is given."""
-    mock_client = _make_mock_client({"data": []})
+    mock_client = MagicMock()
+    mock_client.search = AsyncMock(return_value=[])
 
     with patch.object(tools_module, "_client", mock_client):
         await tvdb_search_series(query="Firefly", year=2002)
 
-    call_kwargs = mock_client.get.call_args
-    params = call_kwargs[1]["params"] if call_kwargs[1] else call_kwargs[0][1]
-    assert params["year"] == 2002
+    _, kwargs = mock_client.search.call_args
+    assert kwargs["year"] == 2002
 
 
 @pytest.mark.asyncio
 async def test_tvdb_search_series_offset_and_limit_passed_to_api() -> None:
     """tvdb_search_series passes offset and limit directly to the API."""
-    mock_client = _make_mock_client({"data": []})
+    mock_client = MagicMock()
+    mock_client.search = AsyncMock(return_value=[])
 
     with patch.object(tools_module, "_client", mock_client):
         await tvdb_search_series(query="Lost", offset=20, limit=5)
 
-    call_kwargs = mock_client.get.call_args
-    params = call_kwargs[1]["params"] if call_kwargs[1] else call_kwargs[0][1]
-    assert params["offset"] == 20
-    assert params["limit"] == 5
+    _, kwargs = mock_client.search.call_args
+    assert kwargs["offset"] == 20
+    assert kwargs["limit"] == 5

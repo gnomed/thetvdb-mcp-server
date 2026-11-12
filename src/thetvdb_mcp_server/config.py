@@ -27,10 +27,11 @@ class LoggingConfig:
 
 @dataclass
 class TvdbConfig:
-    """TVDB API credentials."""
+    """TVDB API credentials and preferences."""
 
     api_key: str
     pin: str | None = None
+    primary_language: str | None = None
 
 
 @dataclass
@@ -71,5 +72,6 @@ def load_config(path: Path = Path("config.toml")) -> AppConfig:
     tvdb = TvdbConfig(
         api_key=tvdb_raw["api_key"],
         pin=tvdb_raw.get("pin"),
+        primary_language=tvdb_raw.get("primary_language"),
     )
     return AppConfig(server=server, logging=logging, tvdb=tvdb)

@@ -1,8 +1,5 @@
-"""Unit tests for TvdbClient."""
+"""Unit tests for TvdbClient wrapper."""
 
-import base64
-import json
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,184 +7,118 @@ import pytest
 from thetvdb_mcp_server.rate_limiter import AsyncRateLimiter
 from thetvdb_mcp_server.tvdb_client import TvdbClient
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
+def make_mock_tvdb():
+    """Return a mock TVDB instance with mocked methods.
 
-def make_jwt(exp: int) -> str:
-    """Return a minimal JWT-like string with the given exp claim."""
-    payload_bytes = json.dumps({"exp": exp}).encode()
-    payload_b64 = base64.urlsafe_b64encode(payload_bytes).rstrip(b"=").decode()
-    return f"fakeheader.{payload_b64}.fakesig"
-
-
-def fresh_jwt() -> str:
-    return make_jwt(int(time.time()) + 7200)
-
-
-def stale_jwt() -> str:
-    return make_jwt(int(time.time()) + 300)
-
-
-class SpyRateLimiter(AsyncRateLimiter):
-    """Rate limiter subclass that counts how many times a slot is acquired."""
-
-    def __init__(self) -> None:
-        super().__init__(calls_per_second=1000.0)
-        self.acquire_count = 0
-
-    async def __aenter__(self) -> "SpyRateLimiter":
-        self.acquire_count += 1
-        await super().__aenter__()
-        return self
-
-
-def make_mock_http(
-    post_token: str | None = None,
-    get_side_effects: list | None = None,
-) -> AsyncMock:
-    """Return a mock httpx.AsyncClient instance.
-
-    Args:
-        post_token: JWT string the mock /login POST should return. Defaults
-            to a fresh JWT.
-        get_side_effects: List of mock responses for sequential GET calls.
-            If ``None``, a single 200 success response is used.
+    The official tvdb_v4_official client uses synchronous HTTP calls via urllib.
     """
-    if post_token is None:
-        post_token = fresh_jwt()
-
-    post_response = MagicMock()
-    post_response.status_code = 200
-    post_response.json.return_value = {"data": {"token": post_token}}
-    post_response.raise_for_status = MagicMock()
-
-    mock_client = AsyncMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-    mock_client.post = AsyncMock(return_value=post_response)
-
-    if get_side_effects is None:
-        ok_response = MagicMock()
-        ok_response.status_code = 200
-        ok_response.json.return_value = {"data": {"id": 1}}
-        ok_response.raise_for_status = MagicMock()
-        mock_client.get = AsyncMock(return_value=ok_response)
-    else:
-        mock_client.get = AsyncMock(side_effect=get_side_effects)
-
-    return mock_client
-
-
-# ---------------------------------------------------------------------------
-# _decode_exp
-# ---------------------------------------------------------------------------
-
-
-def test_decode_exp_parses_known_payload() -> None:
-    """_decode_exp returns the exp value encoded in the JWT payload."""
-    expected_exp = 1_700_000_000
-    token = make_jwt(expected_exp)
-    client = TvdbClient("key", None, AsyncRateLimiter())
-    assert client._decode_exp(token) == expected_exp
-
-
-# ---------------------------------------------------------------------------
-# _token_is_fresh
-# ---------------------------------------------------------------------------
-
-
-def test_token_is_fresh_returns_false_when_no_token() -> None:
-    """_token_is_fresh returns False when no token has been cached."""
-    client = TvdbClient("key", None, AsyncRateLimiter())
-    assert client._token_is_fresh() is False
-
-
-def test_token_is_fresh_returns_false_when_expiring_soon() -> None:
-    """_token_is_fresh returns False when the token expires in < 600 seconds."""
-    client = TvdbClient("key", None, AsyncRateLimiter())
-    client._token = stale_jwt()
-    assert client._token_is_fresh() is False
-
-
-def test_token_is_fresh_returns_true_when_well_within_validity() -> None:
-    """_token_is_fresh returns True when the token expires in > 600 seconds."""
-    client = TvdbClient("key", None, AsyncRateLimiter())
-    client._token = fresh_jwt()
-    assert client._token_is_fresh() is True
-
-
-# ---------------------------------------------------------------------------
-# get — authentication behaviour
-# ---------------------------------------------------------------------------
+    mock_tvdb = MagicMock()
+    mock_tvdb.get_series = MagicMock(return_value={"id": 1, "name": "Test Series"})
+    mock_tvdb.get_series_episodes = MagicMock(
+        return_value={
+            "series": {"id": 1, "name": "Test Series"},
+            "episodes": [{"id": 100, "number": 1, "seasonNumber": 1}],
+        }
+    )
+    mock_tvdb.search = MagicMock(return_value=[{"tvdb_id": "1", "name": "Test"}])
+    return mock_tvdb
 
 
 @pytest.mark.asyncio
-async def test_get_authenticates_on_first_use() -> None:
-    """get calls _authenticate when no token is cached."""
-    spy = SpyRateLimiter()
-    client = TvdbClient("key", None, spy)
+async def test_get_series_calls_tvdb_get_series() -> None:
+    """get_series forwards the call to the TVDB client."""
+    mock_tvdb = make_mock_tvdb()
+    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
+        client = TvdbClient("key", None, AsyncRateLimiter())
+        result = await client.get_series(78804)
 
-    mock_http = make_mock_http()
-    with patch("thetvdb_mcp_server.tvdb_client.httpx.AsyncClient", return_value=mock_http):
-        await client.get("/series/1")
-
-    mock_http.post.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_get_does_not_reauthenticate_when_token_is_fresh() -> None:
-    """get skips authentication when a fresh token is already cached."""
-    spy = SpyRateLimiter()
-    client = TvdbClient("key", None, spy)
-    client._token = fresh_jwt()
-
-    mock_http = make_mock_http()
-    with patch("thetvdb_mcp_server.tvdb_client.httpx.AsyncClient", return_value=mock_http):
-        await client.get("/series/1")
-
-    mock_http.post.assert_not_called()
+    mock_tvdb.get_series.assert_called_once_with(78804)
+    assert result["id"] == 1
 
 
 @pytest.mark.asyncio
-async def test_get_reauthenticates_and_retries_on_401() -> None:
-    """get re-authenticates once and retries the request on a 401 response."""
-    spy = SpyRateLimiter()
-    client = TvdbClient("key", None, spy)
-    client._token = fresh_jwt()
+async def test_get_series_episodes_without_lang() -> None:
+    """get_series_episodes without lang does not pass lang to TVDB."""
+    mock_tvdb = make_mock_tvdb()
+    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
+        client = TvdbClient("key", None, AsyncRateLimiter())
+        await client.get_series_episodes(78804, season_type="official")
 
-    unauthorized = MagicMock()
-    unauthorized.status_code = 401
-
-    success = MagicMock()
-    success.status_code = 200
-    success.json.return_value = {"data": {"id": 42}}
-    success.raise_for_status = MagicMock()
-
-    mock_http = make_mock_http(get_side_effects=[unauthorized, success])
-    with patch("thetvdb_mcp_server.tvdb_client.httpx.AsyncClient", return_value=mock_http):
-        result = await client.get("/series/1")
-
-    assert mock_http.post.call_count == 1
-    assert mock_http.get.call_count == 2
-    assert result == {"data": {"id": 42}}
-
-
-# ---------------------------------------------------------------------------
-# rate limiter acquisition
-# ---------------------------------------------------------------------------
+    _, kwargs = mock_tvdb.get_series_episodes.call_args
+    assert kwargs["lang"] is None
 
 
 @pytest.mark.asyncio
-async def test_rate_limiter_acquired_for_every_outbound_call() -> None:
-    """Rate limiter is acquired for authentication and each data GET."""
-    spy = SpyRateLimiter()
-    client = TvdbClient("key", None, spy)
-    # No cached token — first get will authenticate (1 limiter slot) then
-    # make the data request (1 limiter slot), totalling 2 acquisitions.
-    mock_http = make_mock_http()
-    with patch("thetvdb_mcp_server.tvdb_client.httpx.AsyncClient", return_value=mock_http):
-        await client.get("/series/1")
+async def test_get_series_episodes_with_explicit_lang() -> None:
+    """get_series_episodes with explicit lang passes it to TVDB."""
+    mock_tvdb = make_mock_tvdb()
+    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
+        client = TvdbClient("key", None, AsyncRateLimiter())
+        await client.get_series_episodes(78804, season_type="official", lang="deu")
 
-    assert spy.acquire_count == 2
+    _, kwargs = mock_tvdb.get_series_episodes.call_args
+    assert kwargs["lang"] == "deu"
+
+
+@pytest.mark.asyncio
+async def test_get_series_episodes_with_primary_language() -> None:
+    """get_series_episodes uses primary_language when lang is not provided."""
+    mock_tvdb = make_mock_tvdb()
+    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
+        client = TvdbClient("key", None, AsyncRateLimiter(), primary_language="eng")
+        await client.get_series_episodes(78804, season_type="official")
+
+    _, kwargs = mock_tvdb.get_series_episodes.call_args
+    assert kwargs["lang"] == "eng"
+
+
+@pytest.mark.asyncio
+async def test_get_series_episodes_explicit_lang_overrides_primary() -> None:
+    """Explicit lang overrides primary_language."""
+    mock_tvdb = make_mock_tvdb()
+    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
+        client = TvdbClient("key", None, AsyncRateLimiter(), primary_language="eng")
+        await client.get_series_episodes(78804, season_type="official", lang="deu")
+
+    _, kwargs = mock_tvdb.get_series_episodes.call_args
+    assert kwargs["lang"] == "deu"
+
+
+@pytest.mark.asyncio
+async def test_search_without_primary_language() -> None:
+    """search without primary_language does not include it in params."""
+    mock_tvdb = make_mock_tvdb()
+    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
+        client = TvdbClient("key", None, AsyncRateLimiter())
+        await client.search("doctor who", type_="series")
+
+    _, kwargs = mock_tvdb.search.call_args
+    assert "primaryLanguage" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_search_with_primary_language() -> None:
+    """search with primary_language includes it in params."""
+    mock_tvdb = make_mock_tvdb()
+    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
+        client = TvdbClient("key", None, AsyncRateLimiter(), primary_language="eng")
+        await client.search("doctor who", type_="series")
+
+    _, kwargs = mock_tvdb.search.call_args
+    assert kwargs["primaryLanguage"] == "eng"
+
+
+@pytest.mark.asyncio
+async def test_search_passes_all_params() -> None:
+    """search passes all provided params to TVDB."""
+    mock_tvdb = make_mock_tvdb()
+    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
+        client = TvdbClient("key", None, AsyncRateLimiter())
+        await client.search("doctor who", type_="series", year=2005, offset=10, limit=5)
+
+    _, kwargs = mock_tvdb.search.call_args
+    assert kwargs["type"] == "series"
+    assert kwargs["year"] == 2005
+    assert kwargs["offset"] == 10
+    assert kwargs["limit"] == 5

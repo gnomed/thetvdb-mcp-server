@@ -4,3 +4,12 @@ port = 8080
 
 [logging]
 level = "info"
+
+[tvdb]
+api_key = "YOUR_API_KEY"
+# Optional: subscriber PIN for extended access
+# pin = "YOUR_PIN"
+# Optional: 3-character ISO 639-2 language code to filter results by primary
+# language. Applied to search and episode queries. Omit or leave null to
+# receive results in all languages.
+# primary_language = "eng"

@@ -1,22 +1,15 @@
-"""TVDB API client with transparent authentication and rate limiting."""
+"""TVDB API client wrapper using the official tvdb_v4_official package."""
 
-import base64
-import json
-import time
-
-import httpx
+import tvdb_v4_official
 
 from thetvdb_mcp_server.rate_limiter import AsyncRateLimiter
 
-_BASE_URL = "https://api4.thetvdb.com/v4"
-
 
 class TvdbClient:
-    """HTTP client for the TVDB v4 API.
+    """Wrapper around the official TVDB v4 Python client.
 
-    Handles JWT authentication transparently, including token caching,
-    proactive refresh before expiry, and automatic 401 retry. All outbound
-    requests (authentication and data) pass through the provided rate limiter.
+    Handles rate limiting and provides a simplified interface for the
+    operations this MCP server needs.
 
     Args:
         api_key: TVDB API key obtained from the TVDB developer portal.
@@ -24,79 +17,68 @@ class TvdbClient:
             if not applicable.
         rate_limiter: Shared rate limiter instance used to throttle all
             outbound calls.
+        primary_language: Optional 3-character ISO 639-2 language code
+            (e.g. "eng") applied to search and episode queries. Pass ``None``
+            to disable language filtering.
     """
 
-    def __init__(self, api_key: str, pin: str | None, rate_limiter: AsyncRateLimiter) -> None:
-        self._api_key = api_key
-        self._pin = pin
+    def __init__(
+        self,
+        api_key: str,
+        pin: str | None,
+        rate_limiter: AsyncRateLimiter,
+        primary_language: str | None = None,
+    ) -> None:
+        self._tvdb = tvdb_v4_official.TVDB(api_key, pin or "")
         self._rate_limiter = rate_limiter
-        self._token: str | None = None
+        self._primary_language = primary_language
 
-    async def _authenticate(self) -> None:
-        payload: dict[str, str] = {"apikey": self._api_key}
-        if self._pin is not None:
-            payload["pin"] = self._pin
+    async def get_series(self, series_id: int) -> dict:
+        """Fetch a series base record by ID."""
         async with self._rate_limiter:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(f"{_BASE_URL}/login", json=payload)
-                response.raise_for_status()
-                body = response.json()
-        self._token = body["data"]["token"]
+            return self._tvdb.get_series(series_id)
 
-    def _decode_exp(self, token: str) -> int:
-        payload_b64 = token.split(".")[1]
-        padding = (4 - len(payload_b64) % 4) % 4
-        payload_bytes = base64.urlsafe_b64decode(payload_b64 + "=" * padding)
-        payload = json.loads(payload_bytes)
-        return int(payload["exp"])
+    async def get_series_episodes(
+        self,
+        series_id: int,
+        season_type: str = "default",
+        lang: str | None = None,
+        page: int = 0,
+    ) -> dict:
+        """Fetch episodes for a series by season type with optional language.
 
-    def _token_is_fresh(self) -> bool:
-        if self._token is None:
-            return False
-        return self._decode_exp(self._token) - time.time() > 600
-
-    async def _ensure_token(self) -> None:
-        if not self._token_is_fresh():
-            await self._authenticate()
-
-    async def get(self, path: str, params: dict | None = None) -> dict:  # type: ignore[type-arg]
-        """Fetch a TVDB API resource.
-
-        Ensures a valid bearer token is available before making the request.
-        On a 401 response, re-authenticates once and retries. Every outbound
-        call (authentication and data) passes through the rate limiter.
-
-        Args:
-            path: API path relative to ``https://api4.thetvdb.com/v4``,
-                e.g. ``/series/78804``.
-            params: Optional query parameters to include in the request.
-
-        Returns:
-            The parsed JSON response body as a dictionary.
-
-        Raises:
-            httpx.HTTPStatusError: If the response status is non-2xx (other
-                than a handled 401 that is successfully retried).
+        If ``lang`` is not provided, the configured ``primary_language`` is used.
+        If neither is set, episodes are returned in their default language.
         """
-        await self._ensure_token()
-
+        effective_lang = lang or self._primary_language
         async with self._rate_limiter:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{_BASE_URL}{path}",
-                    headers={"Authorization": f"Bearer {self._token}"},
-                    params=params,
-                )
+            return self._tvdb.get_series_episodes(
+                series_id,
+                season_type=season_type,
+                page=page,
+                lang=effective_lang,
+            )
 
-        if response.status_code == 401:
-            await self._authenticate()
-            async with self._rate_limiter:
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(
-                        f"{_BASE_URL}{path}",
-                        headers={"Authorization": f"Bearer {self._token}"},
-                        params=params,
-                    )
+    async def search(
+        self,
+        query: str,
+        type_: str | None = None,
+        year: int | None = None,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> list:
+        """Search TVDB with optional language filtering.
 
-        response.raise_for_status()
-        return response.json()  # type: ignore[no-any-return]
+        Applies the configured ``primary_language`` to restrict results to
+        series and movies in that language.
+        """
+        params: dict[str, object] = {
+            "type": type_,
+            "year": year,
+            "offset": offset,
+            "limit": limit,
+        }
+        if self._primary_language is not None:
+            params["primaryLanguage"] = self._primary_language
+        async with self._rate_limiter:
+            return self._tvdb.search(query, **params)

@@ -25,6 +25,7 @@ def init_tools(config: AppConfig) -> None:
         api_key=config.tvdb.api_key,
         pin=config.tvdb.pin,
         rate_limiter=tvdb_rate_limiter,
+        primary_language=config.tvdb.primary_language,
     )
 
 
@@ -129,8 +130,7 @@ async def tvdb_get_series(series_id: int) -> dict[str, Any]:
         ``lastAired``, ``status``, ``originalNetwork``, and ``genres``.
     """
     assert _client is not None, "init_tools() must be called before using tools"
-    response = await _client.get(f"/series/{series_id}")
-    return response["data"]  # type: ignore[return-value]
+    return await _client.get_series(series_id)
 
 
 async def tvdb_get_series_naming_bundle(
@@ -184,19 +184,13 @@ async def tvdb_get_series_naming_bundle(
     assert _client is not None, "init_tools() must be called before using tools"
 
     if season_type is None:
-        response = await _client.get(f"/series/{series_id}")
-        return response["data"]  # type: ignore[return-value]
+        return await _client.get_series(series_id)
 
     episodes: list[dict[str, Any]] = []
     page = 0
     while True:
-        if lang is not None:
-            path = f"/series/{series_id}/episodes/{season_type}/{lang}"
-        else:
-            path = f"/series/{series_id}/episodes/{season_type}"
-        response = await _client.get(path, params={"page": page})
-        data = response.get("data", {})
-        page_episodes: list[dict[str, Any]] = data.get("episodes", [])
+        response = await _client.get_series_episodes(series_id, season_type=season_type, lang=lang, page=page)
+        page_episodes: list[dict[str, Any]] = response.get("episodes", [])
         if not page_episodes:
             break
         episodes.extend(page_episodes)
@@ -216,9 +210,12 @@ async def tvdb_search_series(
     first step when you need a TVDB series ID before fetching full series
     details or episode lists.
 
+    If a ``primary_language`` is configured, results are restricted to series
+    in that language.
+
     Args:
         query: Search string. Matched against series titles, aliases, and
-            translations across all languages. Required.
+            translations. Required.
         year: Optional four-digit year to restrict results to series that
             first aired in that year. Omit to search all years.
         offset: Number of results to skip, for pagination. Defaults to ``0``.
@@ -231,16 +228,7 @@ async def tvdb_search_series(
         ``image_url``, ``overview``, ``status``, and ``tvdb_id``.
     """
     assert _client is not None, "init_tools() must be called before using tools"
-    params: dict[str, Any] = {
-        "q": query,
-        "type": "series",
-        "offset": offset,
-        "limit": limit,
-    }
-    if year is not None:
-        params["year"] = year
-    response = await _client.get("/search", params=params)
-    return response.get("data", [])  # type: ignore[return-value]
+    return await _client.search(query, type_="series", year=year, offset=offset, limit=limit)
 
 
 def _get_timezone(timezone: str) -> ZoneInfo:
