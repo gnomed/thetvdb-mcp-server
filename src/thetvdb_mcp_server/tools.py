@@ -22,65 +22,24 @@ def init_tools(config: AppConfig) -> None:
         api_key=config.tvdb.api_key,
         pin=config.tvdb.pin,
         rate_limiter=tvdb_rate_limiter,
-        primary_language=config.tvdb.primary_language,
     )
 
 
 # ======================================================================
-# Private core implementations for dual-variant tools
+# Search and episodes tools
 # ======================================================================
 
 
-async def _search_impl(
-    query: str,
-    type_: str | None,
-    year: int | None,
-    offset: int,
-    limit: int,
-    primary_language: str | None,
-) -> list[dict[str, Any]]:
-    """Core search implementation shared by both language variants."""
-    if _client is None:
-        raise RuntimeError("init_tools() must be called before using TVDB tools")
-    return await _client.search(
-        query=query,
-        type_=type_,
-        year=year,
-        offset=offset,
-        limit=limit,
-        primary_language=primary_language,
-    )
-
-
-async def _get_series_episodes_impl(
-    series_id: int,
-    season_type: str,
-    page: int,
-    lang: str | None,
-) -> dict[str, Any]:
-    """Core implementation for fetching series episodes shared by both language variants."""
-    if _client is None:
-        raise RuntimeError("init_tools() must be called before using TVDB tools")
-    return await _client.get_series_episodes(
-        series_id=series_id,
-        season_type=season_type,
-        page=page,
-        lang=lang,
-    )
-
-
-# ======================================================================
-# tvdb_search — two variants depending on primary_language config
-# ======================================================================
-
-
-async def tvdb_search_with_lang(
+async def tvdb_search(
     query: str,
     type: str | None = None,
     year: int | None = None,
     offset: int = 0,
     limit: int = 10,
     primary_language: str | None = None,
+    country: str | None = None,
+    director: str | None = None,
+    remote_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search TVDB for series, movies, people, episodes, and more.
 
@@ -97,66 +56,39 @@ async def tvdb_search_with_lang(
         offset: Number of results to skip (pagination).
         limit: Maximum number of results to return. Defaults to 10.
         primary_language: 3-character ISO 639-2 language code (e.g. "eng").
+        country: Restrict results to a specific country of origin. Should
+            contain a 3 character country code (e.g. "USA"). Currently only
+            used for series and movies.
+        director: Restrict results to a specific director. Generally only
+            used for movies. Should include the full name, e.g. "Steven Spielberg".
+        remote_id: Search for a specific remote ID. Allows searching by
+            IMDB ID, EIDR, or other remote identifiers.
 
     Returns:
         List of unfiltered search result objects.
     """
-    return await _search_impl(
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.search(
         query=query,
         type_=type,
         year=year,
         offset=offset,
         limit=limit,
         primary_language=primary_language,
+        country=country,
+        director=director,
+        remote_id=remote_id,
     )
 
 
-async def tvdb_search_without_lang(
-    query: str,
-    type: str | None = None,
-    year: int | None = None,
-    offset: int = 0,
-    limit: int = 10,
-) -> list[dict[str, Any]]:
-    """Search TVDB for series, movies, people, episodes, and more.
-
-    Searches for series, movies, people, episodes, etc. by title, alias,
-    and translation. Uses the server's configured primary language.
-    Returns up to `limit` results (default 10).
-
-    Args:
-        query: Search text to match against titles, aliases, and translations.
-        type: Filter by entity type. One of: series, movie, person, episode,
-            artwork, award, awardCategory, company, country, genre, language,
-            sourceType, peopleType, season, seasonType, tag, user. Omit to
-            search all types.
-        year: Restrict results to items first aired or released in this year.
-        offset: Number of results to skip (pagination).
-        limit: Maximum number of results to return. Defaults to 10.
-
-    Returns:
-        List of unfiltered search result objects.
-    """
-    return await _search_impl(
-        query=query,
-        type_=type,
-        year=year,
-        offset=offset,
-        limit=limit,
-        primary_language=None,
-    )
-
-
-# ======================================================================
-# tvdb_get_series_episodes — two variants depending on primary_language config
-# ======================================================================
-
-
-async def tvdb_get_series_episodes_with_lang(
+async def tvdb_get_series_episodes(
     series_id: int,
     season_type: str,
     page: int = 0,
     lang: str | None = None,
+    season: int | None = None,
+    episode_number: int | None = None,
 ) -> dict[str, Any]:
     """Fetch all episodes for a series by season ordering type.
 
@@ -169,43 +101,21 @@ async def tvdb_get_series_episodes_with_lang(
             digital, streaming, absolute, alternate, regional.
         page: Page number for pagination.
         lang: 3-character ISO 639-2 language code (e.g. "eng").
+        season: Restrict results to a specific season number.
+        episode_number: Restrict results to a specific episode number.
 
     Returns:
         Unfiltered episodes response containing `series` and `episodes` keys.
     """
-    return await _get_series_episodes_impl(
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_series_episodes(
         series_id=series_id,
         season_type=season_type,
         page=page,
         lang=lang,
-    )
-
-
-async def tvdb_get_series_episodes_without_lang(
-    series_id: int,
-    season_type: str,
-    page: int = 0,
-) -> dict[str, Any]:
-    """Fetch all episodes for a series by season ordering type.
-
-    Uses the server's configured primary language. Valid season_type
-    values: default, aired, dvd, digital, streaming, absolute, alternate,
-    regional.
-
-    Args:
-        series_id: Numeric TVDB series ID.
-        season_type: Season ordering. Valid values: default, aired, dvd,
-            digital, streaming, absolute, alternate, regional.
-        page: Page number for pagination.
-
-    Returns:
-        Unfiltered episodes response containing `series` and `episodes` keys.
-    """
-    return await _get_series_episodes_impl(
-        series_id=series_id,
-        season_type=season_type,
-        page=page,
-        lang=None,
+        season=season,
+        episode_number=episode_number,
     )
 
 

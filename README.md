@@ -93,8 +93,6 @@ level = "info"
 
 [tvdb]
 api_key = "YOUR_API_KEY"
-# Optional: 3-character ISO 639-2 language code (e.g. "eng")
-# primary_language = "eng"
 ```
 
 ### [server]
@@ -116,14 +114,6 @@ api_key = "YOUR_API_KEY"
 |---|---|---|
 | `api_key` | *(required)* | Your TVDB API key. |
 | `pin` | `null` | Optional subscriber PIN for extended access. |
-| `primary_language` | `null` | Optional 3-character ISO 639-2 language code (e.g. `"eng"`). See below for how this affects tool schemas. |
-
-#### Primary language behaviour
-
-The `primary_language` setting controls how language parameters appear in the tool schemas for `tvdb_search` and `tvdb_get_series_episodes`:
-
-- **When `primary_language` is set:** The language parameters are hidden from the tool schemas. The configured language is applied automatically to all search and episode queries.
-- **When `primary_language` is not set:** The language parameters (`primary_language` on search, `lang` on episodes) are exposed as optional tool arguments. Callers can specify a language per-query or omit it for all-language results.
 
 ---
 
@@ -225,16 +215,7 @@ The server follows a clean separation of concerns:
 
 ### Dynamic tool registration
 
-Tools are not registered via `@mcp.tool()` decorators at import time. Instead, `main()` in `server.py` loads configuration, initialises the shared TVDB client, and then explicitly registers each tool. This allows the tool schema to depend on runtime configuration.
-
-### Two-implementation pattern
-
-Two tools — `tvdb_search` and `tvdb_get_series_episodes` — have two implementation variants each:
-
-- **With language:** Exposes a language parameter when `primary_language` is not set in config.
-- **Without language:** Omits the language parameter when `primary_language` is set; the configured language is applied automatically.
-
-At startup, `main()` registers exactly one variant of each based on the configuration. Each pair shares a private core implementation to avoid duplicating logic.
+Tools are not registered via `@mcp.tool()` decorators at import time. Instead, `main()` in `server.py` loads configuration, initialises the shared TVDB client, and then explicitly registers each tool.
 
 ### Adding a tool
 

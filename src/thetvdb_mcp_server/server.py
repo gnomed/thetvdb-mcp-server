@@ -28,11 +28,9 @@ from thetvdb_mcp_server.tools import (
     tvdb_get_season_extended,
     tvdb_get_series,
     tvdb_get_series_by_slug,
-    tvdb_get_series_episodes_with_lang,
-    tvdb_get_series_episodes_without_lang,
+    tvdb_get_series_episodes,
     tvdb_get_series_extended,
-    tvdb_search_with_lang,
-    tvdb_search_without_lang,
+    tvdb_search,
 )
 
 mcp = fastmcp.FastMCP("thetvdb-mcp-server")
@@ -53,7 +51,7 @@ def main() -> None:
     logger = make_logger(config.logging.level)
     init_tools(config)
 
-    # Register all 13 tools dynamically (11 always, 2 conditional)
+    # Register all 13 tools
     mcp.tool(name="tvdb_get_series")(tvdb_get_series)
     mcp.tool(name="tvdb_get_series_extended")(tvdb_get_series_extended)
     mcp.tool(name="tvdb_get_series_by_slug")(tvdb_get_series_by_slug)
@@ -65,20 +63,13 @@ def main() -> None:
     mcp.tool(name="tvdb_get_episode_extended")(tvdb_get_episode_extended)
     mcp.tool(name="tvdb_get_person")(tvdb_get_person)
     mcp.tool(name="tvdb_get_person_extended")(tvdb_get_person_extended)
-
-    # Conditional tools: choose variant based on primary_language config
-    if config.tvdb.primary_language:
-        mcp.tool(name="tvdb_search")(tvdb_search_without_lang)
-        mcp.tool(name="tvdb_get_series_episodes")(tvdb_get_series_episodes_without_lang)
-    else:
-        mcp.tool(name="tvdb_search")(tvdb_search_with_lang)
-        mcp.tool(name="tvdb_get_series_episodes")(tvdb_get_series_episodes_with_lang)
+    mcp.tool(name="tvdb_search")(tvdb_search)
+    mcp.tool(name="tvdb_get_series_episodes")(tvdb_get_series_episodes)
 
     logger.info(
         "Starting thetvdb-mcp-server",
         host=config.server.host,
         port=config.server.port,
-        primary_language=config.tvdb.primary_language,
     )
 
     mcp.run(

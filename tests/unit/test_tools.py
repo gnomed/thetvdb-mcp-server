@@ -17,11 +17,9 @@ from thetvdb_mcp_server.tools import (
     tvdb_get_season_extended,
     tvdb_get_series,
     tvdb_get_series_by_slug,
-    tvdb_get_series_episodes_with_lang,
-    tvdb_get_series_episodes_without_lang,
+    tvdb_get_series_episodes,
     tvdb_get_series_extended,
-    tvdb_search_with_lang,
-    tvdb_search_without_lang,
+    tvdb_search,
 )
 
 
@@ -56,12 +54,12 @@ def make_mock_client():
     return mock
 
 
-def make_config(primary_language: str | None = None) -> AppConfig:
+def make_config() -> AppConfig:
     """Create a test AppConfig."""
     return AppConfig(
         server=ServerConfig(host="localhost", port=8080),
         logging=LoggingConfig(level="info"),
-        tvdb=TvdbConfig(api_key="test-key", pin=None, primary_language=primary_language),
+        tvdb=TvdbConfig(api_key="test-key", pin=None),
     )
 
 
@@ -79,14 +77,14 @@ def patched_tools(mock_client):
 
 
 # ======================================================================
-# tvdb_search — with_lang variant
+# tvdb_search
 # ======================================================================
 
 
 @pytest.mark.asyncio
-async def test_search_with_lang_calls_client(patched_tools) -> None:
-    """tvdb_search_with_lang calls client.search with correct args."""
-    result = await tvdb_search_with_lang("doctor who")
+async def test_search_calls_client(patched_tools) -> None:
+    """tvdb_search calls client.search with correct args."""
+    result = await tvdb_search("doctor who")
 
     patched_tools.search.assert_called_once_with(
         query="doctor who",
@@ -95,14 +93,17 @@ async def test_search_with_lang_calls_client(patched_tools) -> None:
         offset=0,
         limit=10,
         primary_language=None,
+        country=None,
+        director=None,
+        remote_id=None,
     )
     assert len(result) == 1
 
 
 @pytest.mark.asyncio
-async def test_search_with_lang_all_params(patched_tools) -> None:
-    """tvdb_search_with_lang passes all parameters correctly."""
-    await tvdb_search_with_lang("doctor who", type="series", year=2005, offset=5, limit=3, primary_language="eng")
+async def test_search_all_params(patched_tools) -> None:
+    """tvdb_search passes all parameters correctly."""
+    await tvdb_search("doctor who", type="series", year=2005, offset=5, limit=3, primary_language="eng")
 
     patched_tools.search.assert_called_once_with(
         query="doctor who",
@@ -111,85 +112,45 @@ async def test_search_with_lang_all_params(patched_tools) -> None:
         offset=5,
         limit=3,
         primary_language="eng",
+        country=None,
+        director=None,
+        remote_id=None,
     )
 
 
 # ======================================================================
-# tvdb_search — without_lang variant
+# tvdb_get_series_episodes
 # ======================================================================
 
 
 @pytest.mark.asyncio
-async def test_search_without_lang_calls_client(patched_tools) -> None:
-    """tvdb_search_without_lang calls client.search without language."""
-    await tvdb_search_without_lang("doctor who")
-
-    patched_tools.search.assert_called_once_with(
-        query="doctor who",
-        type_=None,
-        year=None,
-        offset=0,
-        limit=10,
-        primary_language=None,
-    )
-
-
-@pytest.mark.asyncio
-async def test_search_without_lang_no_language_param(patched_tools) -> None:
-    """tvdb_search_without_lang does not accept primary_language parameter."""
-    await tvdb_search_without_lang("doctor who", type="series", limit=5)
-
-    _, kwargs = patched_tools.search.call_args
-    assert kwargs["primary_language"] is None
-
-
-# ======================================================================
-# tvdb_get_series_episodes — with_lang variant
-# ======================================================================
-
-
-@pytest.mark.asyncio
-async def test_episodes_with_lang_calls_client(patched_tools) -> None:
-    """tvdb_get_series_episodes_with_lang calls client correctly."""
-    result = await tvdb_get_series_episodes_with_lang(78804, "default")
+async def test_episodes_calls_client(patched_tools) -> None:
+    """tvdb_get_series_episodes calls client correctly."""
+    result = await tvdb_get_series_episodes(78804, "default")
 
     patched_tools.get_series_episodes.assert_called_once_with(
         series_id=78804,
         season_type="default",
         page=0,
         lang=None,
+        season=None,
+        episode_number=None,
     )
     assert "episodes" in result
 
 
 @pytest.mark.asyncio
-async def test_episodes_with_lang_all_params(patched_tools) -> None:
-    """tvdb_get_series_episodes_with_lang passes all parameters."""
-    await tvdb_get_series_episodes_with_lang(78804, "aired", page=2, lang="deu")
+async def test_episodes_all_params(patched_tools) -> None:
+    """tvdb_get_series_episodes passes all parameters."""
+    await tvdb_get_series_episodes(78804, "aired", page=2, lang="deu")
 
     patched_tools.get_series_episodes.assert_called_once_with(
         series_id=78804,
         season_type="aired",
         page=2,
         lang="deu",
-    )
-
-
-# ======================================================================
-# tvdb_get_series_episodes — without_lang variant
-# ======================================================================
-
-
-@pytest.mark.asyncio
-async def test_episodes_without_lang_calls_client(patched_tools) -> None:
-    """tvdb_get_series_episodes_without_lang calls client without lang."""
-    await tvdb_get_series_episodes_without_lang(78804, "default")
-
-    patched_tools.get_series_episodes.assert_called_once_with(
-        series_id=78804,
-        season_type="default",
-        page=0,
-        lang=None,
+        season=None,
+        episode_number=None,
     )
 
 
@@ -404,17 +365,6 @@ def test_init_tools_creates_client() -> None:
         args = MockClient.call_args
         assert args[1]["api_key"] == "test-key"
         assert args[1]["pin"] is None
-        assert args[1]["primary_language"] is None
-
-
-def test_init_tools_with_primary_language() -> None:
-    """init_tools passes primary_language to client when configured."""
-    with patch("thetvdb_mcp_server.tools.TvdbClient") as MockClient:
-        config = make_config(primary_language="eng")
-        init_tools(config)
-
-        args = MockClient.call_args
-        assert args[1]["primary_language"] == "eng"
 
 
 # ======================================================================
@@ -427,7 +377,7 @@ async def test_search_raises_without_init() -> None:
     """tvdb_search raises RuntimeError if init_tools() not called."""
     with patch("thetvdb_mcp_server.tools._client", None):
         with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_search_with_lang("test")
+            await tvdb_search("test")
 
 
 @pytest.mark.asyncio
@@ -435,7 +385,7 @@ async def test_episodes_raises_without_init() -> None:
     """tvdb_get_series_episodes raises RuntimeError if init_tools() not called."""
     with patch("thetvdb_mcp_server.tools._client", None):
         with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_series_episodes_with_lang(78804, "default")
+            await tvdb_get_series_episodes(78804, "default")
 
 
 @pytest.mark.asyncio

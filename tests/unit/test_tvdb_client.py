@@ -79,7 +79,7 @@ async def test_get_series_extended_both_false_uses_short(client, mock_tvdb) -> N
 
     await client.get_series_extended(78804, include_characters=False, include_artworks=False)
 
-    mock_tvdb.get_series_extended.assert_called_once_with(78804, short=True)
+    mock_tvdb.get_series_extended.assert_called_once_with(78804, short=True, meta=None)
 
 
 @pytest.mark.asyncio
@@ -106,7 +106,7 @@ async def test_get_series_extended_characters_only(client, mock_tvdb) -> None:
 
     result = await client.get_series_extended(78804, include_characters=True, include_artworks=False)
 
-    mock_tvdb.get_series_extended.assert_called_once_with(78804, short=False)
+    mock_tvdb.get_series_extended.assert_called_once_with(78804, short=False, meta=None)
     assert "characters" in result
     assert "artworks" not in result
 
@@ -124,7 +124,7 @@ async def test_get_series_extended_artworks_only(client, mock_tvdb) -> None:
 
     result = await client.get_series_extended(78804, include_characters=False, include_artworks=True)
 
-    mock_tvdb.get_series_extended.assert_called_once_with(78804, short=False)
+    mock_tvdb.get_series_extended.assert_called_once_with(78804, short=False, meta=None)
     assert "characters" not in result
     assert "artworks" in result
 
@@ -142,7 +142,7 @@ async def test_get_series_extended_both_true(client, mock_tvdb) -> None:
 
     result = await client.get_series_extended(78804, include_characters=True, include_artworks=True)
 
-    mock_tvdb.get_series_extended.assert_called_once_with(78804, short=False)
+    mock_tvdb.get_series_extended.assert_called_once_with(78804, short=False, meta=None)
     assert "characters" in result
     assert "artworks" in result
 
@@ -165,28 +165,6 @@ async def test_get_series_episodes_without_lang(client, mock_tvdb) -> None:
 async def test_get_series_episodes_with_explicit_lang(client, mock_tvdb) -> None:
     """get_series_episodes with explicit lang passes it to TVDB."""
     await client.get_series_episodes(78804, season_type="official", lang="deu")
-
-    _, kwargs = mock_tvdb.get_series_episodes.call_args
-    assert kwargs["lang"] == "deu"
-
-
-@pytest.mark.asyncio
-async def test_get_series_episodes_with_primary_language(client, mock_tvdb) -> None:
-    """get_series_episodes uses primary_language when lang is not provided."""
-    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
-        client_with_lang = TvdbClient("key", None, AsyncRateLimiter(), primary_language="eng")
-        await client_with_lang.get_series_episodes(78804, season_type="official")
-
-    _, kwargs = mock_tvdb.get_series_episodes.call_args
-    assert kwargs["lang"] == "eng"
-
-
-@pytest.mark.asyncio
-async def test_get_series_episodes_explicit_lang_overrides_primary(client, mock_tvdb) -> None:
-    """Explicit lang overrides primary_language."""
-    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
-        client_with_lang = TvdbClient("key", None, AsyncRateLimiter(), primary_language="eng")
-        await client_with_lang.get_series_episodes(78804, season_type="official", lang="deu")
 
     _, kwargs = mock_tvdb.get_series_episodes.call_args
     assert kwargs["lang"] == "deu"
@@ -295,7 +273,7 @@ async def test_get_episode_extended(client, mock_tvdb) -> None:
     """get_episode_extended forwards the episode ID to TVDB."""
     result = await client.get_episode_extended(11111)
 
-    mock_tvdb.get_episode_extended.assert_called_once_with(11111)
+    mock_tvdb.get_episode_extended.assert_called_once_with(11111, meta=None)
     assert result["id"] == 1
 
 
@@ -323,7 +301,7 @@ async def test_get_person_extended(client, mock_tvdb) -> None:
     """get_person_extended forwards the person ID to TVDB."""
     result = await client.get_person_extended(22222)
 
-    mock_tvdb.get_person_extended.assert_called_once_with(22222)
+    mock_tvdb.get_person_extended.assert_called_once_with(22222, meta=None)
     assert result["id"] == 1
 
 
@@ -333,8 +311,8 @@ async def test_get_person_extended(client, mock_tvdb) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_without_primary_language(client, mock_tvdb) -> None:
-    """search without primary_language does not include it in params."""
+async def test_search_without_language(client, mock_tvdb) -> None:
+    """search without language does not include it in params."""
     await client.search("doctor who", type_="series")
 
     _, kwargs = mock_tvdb.search.call_args
@@ -342,25 +320,12 @@ async def test_search_without_primary_language(client, mock_tvdb) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_with_primary_language(client, mock_tvdb) -> None:
-    """search with primary_language includes it in params."""
-    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
-        client_with_lang = TvdbClient("key", None, AsyncRateLimiter(), primary_language="eng")
-        await client_with_lang.search("doctor who", type_="series")
+async def test_search_with_language(client, mock_tvdb) -> None:
+    """search with language includes it in params."""
+    await client.search("doctor who", type_="series", primary_language="eng")
 
     _, kwargs = mock_tvdb.search.call_args
     assert kwargs["primaryLanguage"] == "eng"
-
-
-@pytest.mark.asyncio
-async def test_search_explicit_language_overrides_primary(client, mock_tvdb) -> None:
-    """Explicit primary_language overrides configured primary_language."""
-    with patch("thetvdb_mcp_server.tvdb_client.tvdb_v4_official.TVDB", return_value=mock_tvdb):
-        client_with_lang = TvdbClient("key", None, AsyncRateLimiter(), primary_language="eng")
-        await client_with_lang.search("doctor who", type_="series", primary_language="deu")
-
-    _, kwargs = mock_tvdb.search.call_args
-    assert kwargs["primaryLanguage"] == "deu"
 
 
 @pytest.mark.asyncio

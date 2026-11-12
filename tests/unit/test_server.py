@@ -18,20 +18,18 @@ from thetvdb_mcp_server.tools import (
     tvdb_get_season_extended,
     tvdb_get_series,
     tvdb_get_series_by_slug,
-    tvdb_get_series_episodes_with_lang,
-    tvdb_get_series_episodes_without_lang,
+    tvdb_get_series_episodes,
     tvdb_get_series_extended,
-    tvdb_search_with_lang,
-    tvdb_search_without_lang,
+    tvdb_search,
 )
 
 
-def make_config(primary_language: str | None = None) -> AppConfig:
+def make_config() -> AppConfig:
     """Create a test AppConfig."""
     return AppConfig(
         server=ServerConfig(host="localhost", port=8080),
         logging=LoggingConfig(level="info"),
-        tvdb=TvdbConfig(api_key="test-key", pin=None, primary_language=primary_language),
+        tvdb=TvdbConfig(api_key="test-key", pin=None),
     )
 
 
@@ -52,13 +50,8 @@ def register_tools(mcp, config, mock_client=None):
     mcp.tool(name="tvdb_get_episode_extended")(tvdb_get_episode_extended)
     mcp.tool(name="tvdb_get_person")(tvdb_get_person)
     mcp.tool(name="tvdb_get_person_extended")(tvdb_get_person_extended)
-
-    if config.tvdb.primary_language:
-        mcp.tool(name="tvdb_search")(tvdb_search_without_lang)
-        mcp.tool(name="tvdb_get_series_episodes")(tvdb_get_series_episodes_without_lang)
-    else:
-        mcp.tool(name="tvdb_search")(tvdb_search_with_lang)
-        mcp.tool(name="tvdb_get_series_episodes")(tvdb_get_series_episodes_with_lang)
+    mcp.tool(name="tvdb_search")(tvdb_search)
+    mcp.tool(name="tvdb_get_series_episodes")(tvdb_get_series_episodes)
 
 
 async def get_registered_tool_names(mcp):
@@ -85,10 +78,10 @@ EXPECTED_TOOL_NAMES = [
 
 
 @pytest.mark.asyncio
-async def test_all_tools_registered_without_primary_language() -> None:
-    """All 13 tools are registered when primary_language is not set."""
+async def test_all_tools_registered() -> None:
+    """All 13 tools are registered."""
     mcp = fastmcp.FastMCP("thetvdb-mcp-server")
-    register_tools(mcp, make_config(primary_language=None))
+    register_tools(mcp, make_config())
 
     registered = await get_registered_tool_names(mcp)
 
@@ -98,23 +91,10 @@ async def test_all_tools_registered_without_primary_language() -> None:
 
 
 @pytest.mark.asyncio
-async def test_all_tools_registered_with_primary_language() -> None:
-    """All 13 tools are registered when primary_language is set."""
+async def test_search_has_language_param() -> None:
+    """tvdb_search has primary_language parameter."""
     mcp = fastmcp.FastMCP("thetvdb-mcp-server")
-    register_tools(mcp, make_config(primary_language="eng"))
-
-    registered = await get_registered_tool_names(mcp)
-
-    for tool_name in EXPECTED_TOOL_NAMES:
-        assert tool_name in registered, f"Missing tool: {tool_name}"
-    assert len(registered) == 13
-
-
-@pytest.mark.asyncio
-async def test_search_has_language_param_without_primary_language() -> None:
-    """tvdb_search has primary_language parameter when not configured."""
-    mcp = fastmcp.FastMCP("thetvdb-mcp-server")
-    register_tools(mcp, make_config(primary_language=None))
+    register_tools(mcp, make_config())
 
     tools = await mcp.list_tools()
     search_tool = next(t for t in tools if t.name == "tvdb_search")
@@ -123,22 +103,10 @@ async def test_search_has_language_param_without_primary_language() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_no_language_param_with_primary_language() -> None:
-    """tvdb_search has no primary_language parameter when configured."""
+async def test_episodes_has_language_param() -> None:
+    """tvdb_get_series_episodes has lang parameter."""
     mcp = fastmcp.FastMCP("thetvdb-mcp-server")
-    register_tools(mcp, make_config(primary_language="eng"))
-
-    tools = await mcp.list_tools()
-    search_tool = next(t for t in tools if t.name == "tvdb_search")
-
-    assert "primary_language" not in search_tool.parameters["properties"]
-
-
-@pytest.mark.asyncio
-async def test_episodes_has_language_param_without_primary_language() -> None:
-    """tvdb_get_series_episodes has lang parameter when not configured."""
-    mcp = fastmcp.FastMCP("thetvdb-mcp-server")
-    register_tools(mcp, make_config(primary_language=None))
+    register_tools(mcp, make_config())
 
     tools = await mcp.list_tools()
     episodes_tool = next(t for t in tools if t.name == "tvdb_get_series_episodes")
@@ -147,22 +115,10 @@ async def test_episodes_has_language_param_without_primary_language() -> None:
 
 
 @pytest.mark.asyncio
-async def test_episodes_no_language_param_with_primary_language() -> None:
-    """tvdb_get_series_episodes has no lang parameter when configured."""
+async def test_search_defaults() -> None:
+    """tvdb_search has correct default limit."""
     mcp = fastmcp.FastMCP("thetvdb-mcp-server")
-    register_tools(mcp, make_config(primary_language="eng"))
-
-    tools = await mcp.list_tools()
-    episodes_tool = next(t for t in tools if t.name == "tvdb_get_series_episodes")
-
-    assert "lang" not in episodes_tool.parameters["properties"]
-
-
-@pytest.mark.asyncio
-async def test_search_without_lang_defaults() -> None:
-    """tvdb_search_without_lang has correct default limit."""
-    mcp = fastmcp.FastMCP("thetvdb-mcp-server")
-    register_tools(mcp, make_config(primary_language="eng"))
+    register_tools(mcp, make_config())
 
     tools = await mcp.list_tools()
     search_tool = next(t for t in tools if t.name == "tvdb_search")
@@ -172,10 +128,10 @@ async def test_search_without_lang_defaults() -> None:
 
 
 @pytest.mark.asyncio
-async def test_episodes_without_lang_defaults() -> None:
-    """tvdb_get_series_episodes_without_lang has correct default page."""
+async def test_episodes_defaults() -> None:
+    """tvdb_get_series_episodes has correct default page."""
     mcp = fastmcp.FastMCP("thetvdb-mcp-server")
-    register_tools(mcp, make_config(primary_language="eng"))
+    register_tools(mcp, make_config())
 
     tools = await mcp.list_tools()
     episodes_tool = next(t for t in tools if t.name == "tvdb_get_series_episodes")

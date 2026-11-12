@@ -17,9 +17,6 @@ class TvdbClient:
             if not applicable.
         rate_limiter: Shared rate limiter instance used to throttle all
             outbound calls.
-        primary_language: Optional 3-character ISO 639-2 language code
-            (e.g. "eng") applied to search and episode queries. Pass ``None``
-            to disable language filtering.
     """
 
     def __init__(
@@ -27,11 +24,57 @@ class TvdbClient:
         api_key: str,
         pin: str | None,
         rate_limiter: AsyncRateLimiter,
-        primary_language: str | None = None,
+        result_language: str | None = None,
     ) -> None:
         self._tvdb = tvdb_v4_official.TVDB(api_key, pin or "")
         self._rate_limiter = rate_limiter
-        self._primary_language = primary_language
+        self._result_language = result_language
+
+    def _translate_and_strip(self, record: dict) -> dict:
+        """Apply result_language translation and strip overviews/translations fields.
+
+        If result_language is set, replaces `name` with the translation from the
+        `translations` map (if available) and `overview` with the translation from
+        the `overviews` map (if available). Then removes both maps from the record.
+
+        Handles two TVDB response formats:
+        1. Search results: flat maps {"eng": "Name", "deu": "Name"}
+        2. Extended endpoints: nested nameTranslations/overviewTranslations arrays
+
+        Args:
+            record: A TVDB API response record.
+
+        Returns:
+            The modified record with translations applied and maps stripped.
+        """
+        if self._result_language is None:
+            return record
+
+        translations = record.get("translations")
+        overviews = record.get("overviews")
+
+        # Determine format: flat map (search) or nested object (extended)
+        if isinstance(translations, dict) and "nameTranslations" in translations:
+            # Extended endpoint format
+            for t in translations["nameTranslations"]:
+                if t.get("language") == self._result_language:
+                    record["name"] = t["name"]
+                    break
+            for o in translations.get("overviewTranslations", []):
+                if o.get("language") == self._result_language:
+                    record["overview"] = o["overview"]
+                    break
+            record.pop("translations", None)
+        else:
+            # Search results format (flat maps)
+            if isinstance(translations, dict) and self._result_language in translations:
+                record["name"] = translations[self._result_language]
+            if isinstance(overviews, dict) and self._result_language in overviews:
+                record["overview"] = overviews[self._result_language]
+            record.pop("translations", None)
+            record.pop("overviews", None)
+
+        return record
 
     # ------------------------------------------------------------------
     # Series endpoints
@@ -40,7 +83,8 @@ class TvdbClient:
     async def get_series(self, series_id: int) -> dict:
         """Fetch a series base record by ID."""
         async with self._rate_limiter:
-            return self._tvdb.get_series(series_id)
+            result = self._tvdb.get_series(series_id)
+        return self._translate_and_strip(result)
 
     async def get_series_extended(
         self,
@@ -57,17 +101,18 @@ class TvdbClient:
         unrequested arrays from the response.
         """
         short = not (include_characters or include_artworks)
+        meta = "translations" if self._result_language is not None else None
         async with self._rate_limiter:
-            result = self._tvdb.get_series_extended(series_id, short=short)
+            result = self._tvdb.get_series_extended(series_id, short=short, meta=meta)
 
         if short:
-            return result
+            return self._translate_and_strip(result)
 
         if not include_characters:
             result.pop("characters", None)
         if not include_artworks:
             result.pop("artworks", None)
-        return result
+        return self._translate_and_strip(result)
 
     async def get_series_episodes(
         self,
@@ -75,25 +120,38 @@ class TvdbClient:
         season_type: str = "default",
         page: int = 0,
         lang: str | None = None,
+        season: int | None = None,
+        episode_number: int | None = None,
     ) -> dict:
-        """Fetch episodes for a series by season type with optional language.
-
-        If ``lang`` is not provided, the configured ``primary_language`` is used.
-        If neither is set, episodes are returned in their default language.
-        """
-        effective_lang = lang or self._primary_language
+        """Fetch episodes for a series by season type with optional filters."""
+        params: dict[str, object] = {
+            "season_type": season_type,
+            "page": page,
+            "lang": lang,
+        }
+        if season is not None:
+            params["season"] = season
+        if episode_number is not None:
+            params["episodeNumber"] = episode_number
         async with self._rate_limiter:
-            return self._tvdb.get_series_episodes(
-                series_id,
-                season_type=season_type,
-                page=page,
-                lang=effective_lang,
-            )
+            result = self._tvdb.get_series_episodes(series_id, **params)
+
+        if self._result_language is not None:
+            series = result.get("series")
+            if isinstance(series, dict):
+                self._translate_and_strip(series)
+            episodes = result.get("episodes")
+            if isinstance(episodes, list):
+                for ep in episodes:
+                    if isinstance(ep, dict):
+                        self._translate_and_strip(ep)
+        return result
 
     async def get_series_by_slug(self, slug: str) -> dict:
         """Fetch a series record by its slug."""
         async with self._rate_limiter:
-            return self._tvdb.get_series_by_slug(slug)
+            result = self._tvdb.get_series_by_slug(slug)
+        return self._translate_and_strip(result)
 
     # ------------------------------------------------------------------
     # Season endpoints
@@ -102,12 +160,14 @@ class TvdbClient:
     async def get_season(self, season_id: int) -> dict:
         """Fetch a season base record by ID."""
         async with self._rate_limiter:
-            return self._tvdb.get_season(season_id)
+            result = self._tvdb.get_season(season_id)
+        return self._translate_and_strip(result)
 
     async def get_season_extended(self, season_id: int) -> dict:
         """Fetch a season extended record by ID."""
         async with self._rate_limiter:
-            return self._tvdb.get_season_extended(season_id)
+            result = self._tvdb.get_season_extended(season_id)
+        return self._translate_and_strip(result)
 
     # ------------------------------------------------------------------
     # Artwork endpoints
@@ -116,12 +176,14 @@ class TvdbClient:
     async def get_artwork(self, artwork_id: int) -> dict:
         """Fetch an artwork base record by ID."""
         async with self._rate_limiter:
-            return self._tvdb.get_artwork(artwork_id)
+            result = self._tvdb.get_artwork(artwork_id)
+        return self._translate_and_strip(result)
 
     async def get_artwork_extended(self, artwork_id: int) -> dict:
         """Fetch an artwork extended record by ID."""
         async with self._rate_limiter:
-            return self._tvdb.get_artwork_extended(artwork_id)
+            result = self._tvdb.get_artwork_extended(artwork_id)
+        return self._translate_and_strip(result)
 
     # ------------------------------------------------------------------
     # Episode endpoints
@@ -130,12 +192,15 @@ class TvdbClient:
     async def get_episode(self, episode_id: int) -> dict:
         """Fetch an episode base record by ID."""
         async with self._rate_limiter:
-            return self._tvdb.get_episode(episode_id)
+            result = self._tvdb.get_episode(episode_id)
+        return self._translate_and_strip(result)
 
     async def get_episode_extended(self, episode_id: int) -> dict:
         """Fetch an episode extended record by ID."""
+        meta = "translations" if self._result_language is not None else None
         async with self._rate_limiter:
-            return self._tvdb.get_episode_extended(episode_id)
+            result = self._tvdb.get_episode_extended(episode_id, meta=meta)
+        return self._translate_and_strip(result)
 
     # ------------------------------------------------------------------
     # People endpoints
@@ -144,12 +209,15 @@ class TvdbClient:
     async def get_person(self, person_id: int) -> dict:
         """Fetch a person base record by ID."""
         async with self._rate_limiter:
-            return self._tvdb.get_person(person_id)
+            result = self._tvdb.get_person(person_id)
+        return self._translate_and_strip(result)
 
     async def get_person_extended(self, person_id: int) -> dict:
         """Fetch a person extended record by ID."""
+        meta = "translations" if self._result_language is not None else None
         async with self._rate_limiter:
-            return self._tvdb.get_person_extended(person_id)
+            result = self._tvdb.get_person_extended(person_id, meta=meta)
+        return self._translate_and_strip(result)
 
     # ------------------------------------------------------------------
     # Search endpoint
@@ -163,21 +231,30 @@ class TvdbClient:
         offset: int = 0,
         limit: int = 10,
         primary_language: str | None = None,
+        country: str | None = None,
+        director: str | None = None,
+        remote_id: str | None = None,
     ) -> list:
-        """Search TVDB with optional language filtering.
-
-        If ``primary_language`` is not provided, the configured
-        ``primary_language`` is used. If neither is set, no language
-        filter is applied.
-        """
-        effective_language = primary_language or self._primary_language
+        """Search TVDB with optional filtering parameters."""
         params: dict[str, object] = {
             "type": type_,
             "year": year,
             "offset": offset,
             "limit": limit,
         }
-        if effective_language is not None:
-            params["primaryLanguage"] = effective_language
+        if primary_language is not None:
+            params["primaryLanguage"] = primary_language
+        if country is not None:
+            params["country"] = country
+        if director is not None:
+            params["director"] = director
+        if remote_id is not None:
+            params["remote_id"] = remote_id
         async with self._rate_limiter:
-            return self._tvdb.search(query, **params)
+            results = self._tvdb.search(query, **params)
+
+        if self._result_language is not None:
+            for record in results:
+                if isinstance(record, dict):
+                    self._translate_and_strip(record)
+        return results

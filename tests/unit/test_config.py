@@ -33,19 +33,6 @@ api_key = "testapikey"
 pin = "testpin"
 """
 
-VALID_TOML_WITH_PRIMARY_LANGUAGE = b"""
-[server]
-host = "0.0.0.0"
-port = 8080
-
-[logging]
-level = "debug"
-
-[tvdb]
-api_key = "testapikey"
-primary_language = "eng"
-"""
-
 
 def test_load_config_returns_correct_types() -> None:
     """load_config returns an AppConfig with correctly typed nested dataclasses."""
@@ -101,13 +88,12 @@ def test_load_config_invalid_toml_raises() -> None:
 
 
 def test_load_config_tvdb_api_key_only() -> None:
-    """load_config parses [tvdb] with only api_key; pin and primary_language default to None."""
+    """load_config parses [tvdb] with only api_key; pin defaults to None."""
     with patch("builtins.open", mock_open(read_data=VALID_TOML)):
         config = load_config(Path("config.toml"))
 
     assert config.tvdb.api_key == "testapikey"
     assert config.tvdb.pin is None
-    assert config.tvdb.primary_language is None
 
 
 def test_load_config_tvdb_with_pin() -> None:
@@ -117,15 +103,6 @@ def test_load_config_tvdb_with_pin() -> None:
 
     assert config.tvdb.api_key == "testapikey"
     assert config.tvdb.pin == "testpin"
-
-
-def test_load_config_tvdb_with_primary_language() -> None:
-    """load_config parses [tvdb] with primary_language."""
-    with patch("builtins.open", mock_open(read_data=VALID_TOML_WITH_PRIMARY_LANGUAGE)):
-        config = load_config(Path("config.toml"))
-
-    assert config.tvdb.api_key == "testapikey"
-    assert config.tvdb.primary_language == "eng"
 
 
 def test_load_config_missing_tvdb_section_raises() -> None:
