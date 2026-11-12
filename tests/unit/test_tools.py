@@ -167,8 +167,8 @@ async def test_tvdb_get_series_naming_bundle_mode2_single_page() -> None:
         result = await tvdb_get_series_naming_bundle(series_id=100, season_type="official")
 
     expected = [
-        {"aired": "2020-01-01", "number": 1, "seasonNumber": 1},
-        {"aired": "2020-01-08", "number": 2, "seasonNumber": 1},
+        {"aired": "2020-01-01", "number": 1, "seasonNumber": 1, "name": "Pilot"},
+        {"aired": "2020-01-08", "number": 2, "seasonNumber": 1, "name": "Episode 2"},
     ]
     assert result == expected
 
@@ -216,9 +216,9 @@ async def test_tvdb_get_series_naming_bundle_mode2_multi_page() -> None:
         result = await tvdb_get_series_naming_bundle(series_id=100, season_type="official")
 
     expected = [
-        {"aired": "2020-01-01", "number": 1, "seasonNumber": 1},
-        {"aired": "2020-01-08", "number": 2, "seasonNumber": 1},
-        {"aired": "2020-01-15", "number": 3, "seasonNumber": 1},
+        {"aired": "2020-01-01", "number": 1, "seasonNumber": 1, "name": "Pilot"},
+        {"aired": "2020-01-08", "number": 2, "seasonNumber": 1, "name": "Episode 2"},
+        {"aired": "2020-01-15", "number": 3, "seasonNumber": 1, "name": "Episode 3"},
     ]
     assert result == expected
     assert mock_client.get_series_episodes.await_count == 3
@@ -244,7 +244,7 @@ async def test_tvdb_get_series_naming_bundle_mode3_includes_lang() -> None:
 
 @pytest.mark.asyncio
 async def test_tvdb_get_series_naming_bundle_strips_extra_fields() -> None:
-    """Returns only aired, number, and seasonNumber for each episode."""
+    """Returns only aired, number, seasonNumber, and name for each episode."""
     episode_with_many_fields = {
         "id": 999,
         "tvdb_id": "999",
@@ -269,9 +269,9 @@ async def test_tvdb_get_series_naming_bundle_strips_extra_fields() -> None:
     with patch.object(tools_module, "_client", mock_client):
         result = await tvdb_get_series_naming_bundle(series_id=100, season_type="official")
 
-    assert result == [{"aired": "2020-05-15", "number": 5, "seasonNumber": 2}]
+    assert result == [{"aired": "2020-05-15", "number": 5, "seasonNumber": 2, "name": "Test Episode"}]
     # Verify no extra fields are present.
-    assert len(result[0]) == 3
+    assert len(result[0]) == 4
 
 
 @pytest.mark.asyncio

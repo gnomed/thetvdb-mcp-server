@@ -9,7 +9,7 @@ from thetvdb_mcp_server.rate_limiter import tvdb_rate_limiter
 from thetvdb_mcp_server.tvdb_client import TvdbClient
 
 _client: TvdbClient | None = None
-_EPISODE_FIELDS = {"aired", "number", "seasonNumber"}
+_EPISODE_FIELDS = {"aired", "number", "seasonNumber", "name"}
 
 
 def init_tools(config: AppConfig) -> None:
