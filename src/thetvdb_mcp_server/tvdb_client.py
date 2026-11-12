@@ -56,17 +56,23 @@ class TvdbClient:
 
         translations = record.get("translations")
         overviews = record.get("overviews")
+        name_translations = record.get("nameTranslations")
+        overview_translations = record.get("overviewTranslations")
 
         _logger.debug(
-            "_translate_and_strip called with result_language=%r, has_translations=%s, has_overviews=%s",
+            "_translate_and_strip called with result_language=%r, "
+            "has_translations=%s, has_overviews=%s, has_nameTranslations=%s, "
+            "has_overviewTranslations=%s",
             self._result_language,
             translations is not None,
             overviews is not None,
+            name_translations is not None,
+            overview_translations is not None,
         )
 
-        # Determine format: flat map (search) or nested object (extended)
+        # Determine format
         if isinstance(translations, dict) and "nameTranslations" in translations:
-            # Extended endpoint format
+            # Extended endpoint format (nested)
             name_found = False
             for t in translations["nameTranslations"]:
                 if t.get("language") == self._result_language:
@@ -74,7 +80,7 @@ class TvdbClient:
                     name_found = True
                     break
             _logger.debug(
-                "Extended format: name translation %s found for %s",
+                "Extended format (nested): name translation %s found for %s",
                 "successfully" if name_found else "not",
                 self._result_language,
             )
@@ -86,12 +92,30 @@ class TvdbClient:
                     overview_found = True
                     break
             _logger.debug(
-                "Extended format: overview translation %s found for %s",
+                "Extended format (nested): overview translation %s found for %s",
                 "successfully" if overview_found else "not",
                 self._result_language,
             )
 
             record.pop("translations", None)
+
+        elif name_translations is not None or overview_translations is not None:
+            # Extended endpoint format (top-level arrays of language codes)
+            # These are just lists of available languages, not actual translation data.
+            # Strip them out.
+            if name_translations is not None:
+                _logger.debug(
+                    "Extended format (top-level arrays): stripping nameTranslations (%d languages available)",
+                    len(name_translations) if isinstance(name_translations, list) else 0,
+                )
+            if overview_translations is not None:
+                _logger.debug(
+                    "Extended format (top-level arrays): stripping overviewTranslations (%d languages available)",
+                    len(overview_translations) if isinstance(overview_translations, list) else 0,
+                )
+            record.pop("nameTranslations", None)
+            record.pop("overviewTranslations", None)
+
         else:
             # Search results format (flat maps)
             if isinstance(translations, dict) and self._result_language in translations:
