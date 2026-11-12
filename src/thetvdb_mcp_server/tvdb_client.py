@@ -98,6 +98,11 @@ class TvdbClient:
             )
 
             record.pop("translations", None)
+            # Also strip top-level language code arrays if present
+            if name_translations is not None:
+                record.pop("nameTranslations", None)
+            if overview_translations is not None:
+                record.pop("overviewTranslations", None)
 
         elif name_translations is not None or overview_translations is not None:
             # Extended endpoint format (top-level arrays of language codes)
