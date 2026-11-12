@@ -1,10 +1,13 @@
 """MCP tool implementations for thetvdb-mcp-server."""
 
+import logging
 from typing import Any
 
 from thetvdb_mcp_server.config import AppConfig
 from thetvdb_mcp_server.rate_limiter import tvdb_rate_limiter
 from thetvdb_mcp_server.tvdb_client import TvdbClient
+
+_logger = logging.getLogger(__name__)
 
 _client: TvdbClient | None = None
 
@@ -18,10 +21,15 @@ def init_tools(config: AppConfig) -> None:
         config: Loaded application configuration.
     """
     global _client
+    _logger.debug(
+        "Initializing TvdbClient with result_language=%r",
+        config.tvdb.result_language,
+    )
     _client = TvdbClient(
         api_key=config.tvdb.api_key,
         pin=config.tvdb.pin,
         rate_limiter=tvdb_rate_limiter,
+        result_language=config.tvdb.result_language,
     )
 
 

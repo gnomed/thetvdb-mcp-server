@@ -1,8 +1,12 @@
 """TVDB API client wrapper using the official tvdb_v4_official package."""
 
+import logging
+
 import tvdb_v4_official
 
 from thetvdb_mcp_server.rate_limiter import AsyncRateLimiter
+
+_logger = logging.getLogger(__name__)
 
 
 class TvdbClient:
@@ -53,24 +57,68 @@ class TvdbClient:
         translations = record.get("translations")
         overviews = record.get("overviews")
 
+        _logger.debug(
+            "_translate_and_strip called with result_language=%r, has_translations=%s, has_overviews=%s",
+            self._result_language,
+            translations is not None,
+            overviews is not None,
+        )
+
         # Determine format: flat map (search) or nested object (extended)
         if isinstance(translations, dict) and "nameTranslations" in translations:
             # Extended endpoint format
+            name_found = False
             for t in translations["nameTranslations"]:
                 if t.get("language") == self._result_language:
                     record["name"] = t["name"]
+                    name_found = True
                     break
+            _logger.debug(
+                "Extended format: name translation %s found for %s",
+                "successfully" if name_found else "not",
+                self._result_language,
+            )
+
+            overview_found = False
             for o in translations.get("overviewTranslations", []):
                 if o.get("language") == self._result_language:
                     record["overview"] = o["overview"]
+                    overview_found = True
                     break
+            _logger.debug(
+                "Extended format: overview translation %s found for %s",
+                "successfully" if overview_found else "not",
+                self._result_language,
+            )
+
             record.pop("translations", None)
         else:
             # Search results format (flat maps)
             if isinstance(translations, dict) and self._result_language in translations:
                 record["name"] = translations[self._result_language]
+                _logger.debug(
+                    "Search format: name translation found for %s",
+                    self._result_language,
+                )
+            else:
+                _logger.debug(
+                    "Search format: no name translation for %s (available: %s)",
+                    self._result_language,
+                    list(translations.keys()) if isinstance(translations, dict) else None,
+                )
+
             if isinstance(overviews, dict) and self._result_language in overviews:
                 record["overview"] = overviews[self._result_language]
+                _logger.debug(
+                    "Search format: overview translation found for %s",
+                    self._result_language,
+                )
+            else:
+                _logger.debug(
+                    "Search format: no overview translation for %s",
+                    self._result_language,
+                )
+
             record.pop("translations", None)
             record.pop("overviews", None)
 
