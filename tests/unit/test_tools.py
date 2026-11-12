@@ -1,339 +1,526 @@
 """Unit tests for MCP tool implementations."""
 
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import thetvdb_mcp_server.tools as tools_module
+from thetvdb_mcp_server.config import AppConfig, LoggingConfig, ServerConfig, TvdbConfig
 from thetvdb_mcp_server.tools import (
-    convert_datetime_timezone,
-    get_current_datetime,
-    health_check,
+    init_tools,
+    tvdb_get_artwork,
+    tvdb_get_artwork_extended,
+    tvdb_get_episode,
+    tvdb_get_episode_extended,
+    tvdb_get_person,
+    tvdb_get_person_extended,
+    tvdb_get_season,
+    tvdb_get_season_extended,
     tvdb_get_series,
-    tvdb_get_series_naming_bundle,
-    tvdb_search_series,
+    tvdb_get_series_by_slug,
+    tvdb_get_series_episodes_with_lang,
+    tvdb_get_series_episodes_without_lang,
+    tvdb_get_series_extended,
+    tvdb_search_with_lang,
+    tvdb_search_without_lang,
 )
 
 
-def test_get_current_datetime_returns_iso_string() -> None:
-    """get_current_datetime returns a string parseable by datetime.fromisoformat."""
-    result = get_current_datetime("UTC")
-    parsed = datetime.fromisoformat(result)
-    assert parsed is not None
+def make_mock_client():
+    """Return a mock TvdbClient with all methods as AsyncMocks."""
+    mock = MagicMock()
+    mock.get_series = AsyncMock(return_value={"id": 1, "name": "Test Series"})
+    mock.get_series_extended = AsyncMock(
+        return_value={
+            "id": 1,
+            "name": "Test Series",
+            "characters": [{"id": 10}],
+            "artworks": [{"id": 20}],
+        }
+    )
+    mock.get_series_episodes = AsyncMock(
+        return_value={
+            "series": {"id": 1, "name": "Test Series"},
+            "episodes": [{"id": 100}],
+        }
+    )
+    mock.get_series_by_slug = AsyncMock(return_value={"id": 1, "name": "Test Series"})
+    mock.get_season = AsyncMock(return_value={"id": 1, "name": "Season 1"})
+    mock.get_season_extended = AsyncMock(return_value={"id": 1, "name": "Season 1"})
+    mock.get_artwork = AsyncMock(return_value={"id": 1, "name": "Artwork 1"})
+    mock.get_artwork_extended = AsyncMock(return_value={"id": 1, "name": "Artwork 1"})
+    mock.get_episode = AsyncMock(return_value={"id": 1, "name": "Episode 1"})
+    mock.get_episode_extended = AsyncMock(return_value={"id": 1, "name": "Episode 1"})
+    mock.get_person = AsyncMock(return_value={"id": 1, "name": "Person 1"})
+    mock.get_person_extended = AsyncMock(return_value={"id": 1, "name": "Person 1"})
+    mock.search = AsyncMock(return_value=[{"id": 1, "name": "Test"}])
+    return mock
 
 
-def test_get_current_datetime_offset_matches_timezone() -> None:
-    """get_current_datetime returns +00:00 offset for UTC."""
-    result = get_current_datetime("UTC")
-    parsed = datetime.fromisoformat(result)
-    assert parsed.utcoffset() == UTC.utcoffset(None)
-
-
-def test_get_current_datetime_invalid_timezone_raises_value_error() -> None:
-    """get_current_datetime raises ValueError for an unknown timezone name."""
-    with pytest.raises(ValueError, match="Unknown timezone"):
-        get_current_datetime("Not/ATimezone")
-
-
-def test_convert_datetime_timezone_tokyo_to_edmonton() -> None:
-    """convert_datetime_timezone converts Tokyo time to Edmonton time."""
-    result = convert_datetime_timezone(
-        input_datetime="2026-01-15T23:00:00",
-        input_timezone="Asia/Tokyo",
-        output_timezone="America/Edmonton",
+def make_config(primary_language: str | None = None) -> AppConfig:
+    """Create a test AppConfig."""
+    return AppConfig(
+        server=ServerConfig(host="localhost", port=8080),
+        logging=LoggingConfig(level="info"),
+        tvdb=TvdbConfig(api_key="test-key", pin=None, primary_language=primary_language),
     )
 
-    assert result == {
-        "input_datetime": "2026-01-15T23:00:00+09:00",
-        "input_timezone": "Asia/Tokyo",
-        "input_timezone_abbreviation": "JST",
-        "output_datetime": "2026-01-15T07:00:00-07:00",
-        "output_timezone": "America/Edmonton",
-        "output_timezone_abbreviation": "MST",
-    }
+
+@pytest.fixture
+def mock_client():
+    """Mock TvdbClient fixture."""
+    return make_mock_client()
 
 
-def test_convert_datetime_timezone_invalid_input_timezone_raises_value_error() -> None:
-    """convert_datetime_timezone raises ValueError for an unknown input timezone."""
-    with pytest.raises(ValueError, match="Unknown timezone"):
-        convert_datetime_timezone(
-            input_datetime="2026-01-15T23:00:00",
-            input_timezone="Not/ARealTimezone",
-            output_timezone="America/Edmonton",
-        )
+@pytest.fixture
+def patched_tools(mock_client):
+    """Patch tools module to use mock client."""
+    with patch("thetvdb_mcp_server.tools._client", mock_client):
+        yield mock_client
 
 
-def test_convert_datetime_timezone_rejects_offset_aware_input() -> None:
-    """convert_datetime_timezone rejects input datetimes that already include an offset."""
-    with pytest.raises(ValueError, match="must not include a UTC offset"):
-        convert_datetime_timezone(
-            input_datetime="2026-01-15T23:00:00+09:00",
-            input_timezone="Asia/Tokyo",
-            output_timezone="America/Edmonton",
-        )
-
-
-def test_health_check_returns_ok() -> None:
-    """health_check returns {"status": "ok"}."""
-    result = health_check()
-    assert result == {"status": "ok"}
+# ======================================================================
+# tvdb_search — with_lang variant
+# ======================================================================
 
 
 @pytest.mark.asyncio
-async def test_tvdb_get_series_returns_data_dict() -> None:
-    """tvdb_get_series returns the data dict from the TVDB response."""
-    series_data = {"id": 78804, "name": "Doctor Who", "slug": "doctor-who"}
-    mock_client = MagicMock()
-    mock_client.get_series = AsyncMock(return_value=series_data)
+async def test_search_with_lang_calls_client(patched_tools) -> None:
+    """tvdb_search_with_lang calls client.search with correct args."""
+    result = await tvdb_search_with_lang("doctor who")
 
-    with patch.object(tools_module, "_client", mock_client):
-        result = await tvdb_get_series(series_id=78804)
-
-    assert result == series_data
-
-
-@pytest.mark.asyncio
-async def test_tvdb_get_series_passes_correct_id() -> None:
-    """tvdb_get_series passes the series ID to the client."""
-    mock_client = MagicMock()
-    mock_client.get_series = AsyncMock(return_value={"id": 12345})
-
-    with patch.object(tools_module, "_client", mock_client):
-        await tvdb_get_series(series_id=12345)
-
-    mock_client.get_series.assert_awaited_once_with(12345)
+    patched_tools.search.assert_called_once_with(
+        query="doctor who",
+        type_=None,
+        year=None,
+        offset=0,
+        limit=10,
+        primary_language=None,
+    )
+    assert len(result) == 1
 
 
 @pytest.mark.asyncio
-async def test_tvdb_get_series_naming_bundle_mode1_returns_series_dict() -> None:
-    """Mode 1: returns the series dict when season_type is omitted."""
-    series_data = {"id": 78804, "name": "Doctor Who"}
-    mock_client = MagicMock()
-    mock_client.get_series = AsyncMock(return_value=series_data)
+async def test_search_with_lang_all_params(patched_tools) -> None:
+    """tvdb_search_with_lang passes all parameters correctly."""
+    await tvdb_search_with_lang("doctor who", type="series", year=2005, offset=5, limit=3, primary_language="eng")
 
-    with patch.object(tools_module, "_client", mock_client):
-        result = await tvdb_get_series_naming_bundle(series_id=78804)
-
-    assert result == series_data
-    mock_client.get_series.assert_awaited_once_with(78804)
-
-
-@pytest.mark.asyncio
-async def test_tvdb_get_series_naming_bundle_mode1_ignores_lang() -> None:
-    """Mode 1: lang is ignored when season_type is omitted."""
-    series_data = {"id": 78804, "name": "Doctor Who"}
-    mock_client = MagicMock()
-    mock_client.get_series = AsyncMock(return_value=series_data)
-
-    with patch.object(tools_module, "_client", mock_client):
-        result = await tvdb_get_series_naming_bundle(series_id=78804, lang="eng")
-
-    assert result == series_data
-    mock_client.get_series.assert_awaited_once_with(78804)
-
-
-@pytest.mark.asyncio
-async def test_tvdb_get_series_naming_bundle_mode2_single_page() -> None:
-    """Mode 2: returns combined episode list from a single-page response."""
-    ep1 = {
-        "id": 1,
-        "name": "Pilot",
-        "aired": "2020-01-01",
-        "number": 1,
-        "seasonNumber": 1,
-        "image": "image_url",
-        "overview": "An overview",
-    }
-    ep2 = {
-        "id": 2,
-        "name": "Episode 2",
-        "aired": "2020-01-08",
-        "number": 2,
-        "seasonNumber": 1,
-        "image": "image_url_2",
-        "overview": "Another overview",
-    }
-    # First call returns episodes, second call returns empty to stop pagination.
-    mock_client = MagicMock()
-    mock_client.get_series_episodes = AsyncMock(
-        side_effect=[
-            {"episodes": [ep1, ep2]},
-            {"episodes": []},
-        ]
+    patched_tools.search.assert_called_once_with(
+        query="doctor who",
+        type_="series",
+        year=2005,
+        offset=5,
+        limit=3,
+        primary_language="eng",
     )
 
-    with patch.object(tools_module, "_client", mock_client):
-        result = await tvdb_get_series_naming_bundle(series_id=100, season_type="official")
 
-    expected = [
-        {"aired": "2020-01-01", "number": 1, "seasonNumber": 1, "name": "Pilot"},
-        {"aired": "2020-01-08", "number": 2, "seasonNumber": 1, "name": "Episode 2"},
-    ]
-    assert result == expected
+# ======================================================================
+# tvdb_search — without_lang variant
+# ======================================================================
 
 
 @pytest.mark.asyncio
-async def test_tvdb_get_series_naming_bundle_mode2_multi_page() -> None:
-    """Mode 2: returns combined episode list across multiple pages."""
-    ep1 = {
-        "id": 1,
-        "name": "Pilot",
-        "aired": "2020-01-01",
-        "number": 1,
-        "seasonNumber": 1,
-        "image": "image_url",
-        "overview": "An overview",
-    }
-    ep2 = {
-        "id": 2,
-        "name": "Episode 2",
-        "aired": "2020-01-08",
-        "number": 2,
-        "seasonNumber": 1,
-        "image": "image_url_2",
-        "overview": "Another overview",
-    }
-    ep3 = {
-        "id": 3,
-        "name": "Episode 3",
-        "aired": "2020-01-15",
-        "number": 3,
-        "seasonNumber": 1,
-        "image": "image_url_3",
-        "overview": "Yet another overview",
-    }
-    mock_client = MagicMock()
-    mock_client.get_series_episodes = AsyncMock(
-        side_effect=[
-            {"episodes": [ep1, ep2]},
-            {"episodes": [ep3]},
-            {"episodes": []},
-        ]
+async def test_search_without_lang_calls_client(patched_tools) -> None:
+    """tvdb_search_without_lang calls client.search without language."""
+    await tvdb_search_without_lang("doctor who")
+
+    patched_tools.search.assert_called_once_with(
+        query="doctor who",
+        type_=None,
+        year=None,
+        offset=0,
+        limit=10,
+        primary_language=None,
     )
 
-    with patch.object(tools_module, "_client", mock_client):
-        result = await tvdb_get_series_naming_bundle(series_id=100, season_type="official")
 
-    expected = [
-        {"aired": "2020-01-01", "number": 1, "seasonNumber": 1, "name": "Pilot"},
-        {"aired": "2020-01-08", "number": 2, "seasonNumber": 1, "name": "Episode 2"},
-        {"aired": "2020-01-15", "number": 3, "seasonNumber": 1, "name": "Episode 3"},
-    ]
-    assert result == expected
-    assert mock_client.get_series_episodes.await_count == 3
+@pytest.mark.asyncio
+async def test_search_without_lang_no_language_param(patched_tools) -> None:
+    """tvdb_search_without_lang does not accept primary_language parameter."""
+    await tvdb_search_without_lang("doctor who", type="series", limit=5)
+
+    _, kwargs = patched_tools.search.call_args
+    assert kwargs["primary_language"] is None
+
+
+# ======================================================================
+# tvdb_get_series_episodes — with_lang variant
+# ======================================================================
 
 
 @pytest.mark.asyncio
-async def test_tvdb_get_series_naming_bundle_mode3_includes_lang() -> None:
-    """Mode 3: language code is passed to the client."""
-    mock_client = MagicMock()
-    mock_client.get_series_episodes = AsyncMock(
-        side_effect=[
-            {"episodes": [{"id": 1}]},
-            {"episodes": []},
-        ]
+async def test_episodes_with_lang_calls_client(patched_tools) -> None:
+    """tvdb_get_series_episodes_with_lang calls client correctly."""
+    result = await tvdb_get_series_episodes_with_lang(78804, "default")
+
+    patched_tools.get_series_episodes.assert_called_once_with(
+        series_id=78804,
+        season_type="default",
+        page=0,
+        lang=None,
+    )
+    assert "episodes" in result
+
+
+@pytest.mark.asyncio
+async def test_episodes_with_lang_all_params(patched_tools) -> None:
+    """tvdb_get_series_episodes_with_lang passes all parameters."""
+    await tvdb_get_series_episodes_with_lang(78804, "aired", page=2, lang="deu")
+
+    patched_tools.get_series_episodes.assert_called_once_with(
+        series_id=78804,
+        season_type="aired",
+        page=2,
+        lang="deu",
     )
 
-    with patch.object(tools_module, "_client", mock_client):
-        await tvdb_get_series_naming_bundle(series_id=200, season_type="official", lang="eng")
 
-    _, kwargs = mock_client.get_series_episodes.call_args_list[0]
-    assert kwargs["lang"] == "eng"
+# ======================================================================
+# tvdb_get_series_episodes — without_lang variant
+# ======================================================================
 
 
 @pytest.mark.asyncio
-async def test_tvdb_get_series_naming_bundle_strips_extra_fields() -> None:
-    """Returns only aired, number, seasonNumber, and name for each episode."""
-    episode_with_many_fields = {
-        "id": 999,
-        "tvdb_id": "999",
-        "name": "Test Episode",
-        "aired": "2020-05-15",
-        "number": 5,
-        "seasonNumber": 2,
-        "image": "https://example.com/image.jpg",
-        "overview": "A detailed episode overview",
-        "runtime": 45,
-        "type": "standard",
-        "status": "aired",
-    }
-    mock_client = MagicMock()
-    mock_client.get_series_episodes = AsyncMock(
-        side_effect=[
-            {"episodes": [episode_with_many_fields]},
-            {"episodes": []},
-        ]
+async def test_episodes_without_lang_calls_client(patched_tools) -> None:
+    """tvdb_get_series_episodes_without_lang calls client without lang."""
+    await tvdb_get_series_episodes_without_lang(78804, "default")
+
+    patched_tools.get_series_episodes.assert_called_once_with(
+        series_id=78804,
+        season_type="default",
+        page=0,
+        lang=None,
     )
 
-    with patch.object(tools_module, "_client", mock_client):
-        result = await tvdb_get_series_naming_bundle(series_id=100, season_type="official")
 
-    assert result == [{"aired": "2020-05-15", "number": 5, "seasonNumber": 2, "name": "Test Episode"}]
-    # Verify no extra fields are present.
-    assert len(result[0]) == 4
+# ======================================================================
+# tvdb_get_series
+# ======================================================================
 
 
 @pytest.mark.asyncio
-async def test_tvdb_search_series_returns_results() -> None:
-    """tvdb_search_series returns the list from the TVDB response."""
-    series_list = [{"tvdb_id": "1", "name": "Breaking Bad"}]
-    mock_client = MagicMock()
-    mock_client.search = AsyncMock(return_value=series_list)
+async def test_get_series(patched_tools) -> None:
+    """tvdb_get_series calls client.get_series and returns result."""
+    result = await tvdb_get_series(78804)
 
-    with patch.object(tools_module, "_client", mock_client):
-        result = await tvdb_search_series(query="Breaking Bad")
-
-    assert result == series_list
+    patched_tools.get_series.assert_called_once_with(78804)
+    assert result["id"] == 1
 
 
-@pytest.mark.asyncio
-async def test_tvdb_search_series_returns_empty_list() -> None:
-    """tvdb_search_series returns an empty list when no results."""
-    mock_client = MagicMock()
-    mock_client.search = AsyncMock(return_value=[])
-
-    with patch.object(tools_module, "_client", mock_client):
-        result = await tvdb_search_series(query="Nonexistent Series")
-
-    assert result == []
+# ======================================================================
+# tvdb_get_series_extended
+# ======================================================================
 
 
 @pytest.mark.asyncio
-async def test_tvdb_search_series_omits_year_when_not_provided() -> None:
-    """tvdb_search_series does not include year param when year is None."""
-    mock_client = MagicMock()
-    mock_client.search = AsyncMock(return_value=[])
+async def test_get_series_extended_defaults(patched_tools) -> None:
+    """tvdb_get_series_extended uses default include_ params (both False)."""
+    await tvdb_get_series_extended(78804)
 
-    with patch.object(tools_module, "_client", mock_client):
-        await tvdb_search_series(query="Firefly")
-
-    _, kwargs = mock_client.search.call_args
-    assert kwargs["year"] is None
-
-
-@pytest.mark.asyncio
-async def test_tvdb_search_series_includes_year_when_provided() -> None:
-    """tvdb_search_series includes year param when year is given."""
-    mock_client = MagicMock()
-    mock_client.search = AsyncMock(return_value=[])
-
-    with patch.object(tools_module, "_client", mock_client):
-        await tvdb_search_series(query="Firefly", year=2002)
-
-    _, kwargs = mock_client.search.call_args
-    assert kwargs["year"] == 2002
+    patched_tools.get_series_extended.assert_called_once_with(
+        78804,
+        include_characters=False,
+        include_artworks=False,
+    )
 
 
 @pytest.mark.asyncio
-async def test_tvdb_search_series_offset_and_limit_passed_to_api() -> None:
-    """tvdb_search_series passes offset and limit directly to the API."""
-    mock_client = MagicMock()
-    mock_client.search = AsyncMock(return_value=[])
+async def test_get_series_extended_characters_only(patched_tools) -> None:
+    """tvdb_get_series_extended passes include_characters=True."""
+    await tvdb_get_series_extended(78804, include_characters=True)
 
-    with patch.object(tools_module, "_client", mock_client):
-        await tvdb_search_series(query="Lost", offset=20, limit=5)
+    patched_tools.get_series_extended.assert_called_once_with(
+        78804,
+        include_characters=True,
+        include_artworks=False,
+    )
 
-    _, kwargs = mock_client.search.call_args
-    assert kwargs["offset"] == 20
-    assert kwargs["limit"] == 5
+
+@pytest.mark.asyncio
+async def test_get_series_extended_artworks_only(patched_tools) -> None:
+    """tvdb_get_series_extended passes include_artworks=True."""
+    await tvdb_get_series_extended(78804, include_artworks=True)
+
+    patched_tools.get_series_extended.assert_called_once_with(
+        78804,
+        include_characters=False,
+        include_artworks=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_series_extended_both(patched_tools) -> None:
+    """tvdb_get_series_extended passes both include_ params as True."""
+    await tvdb_get_series_extended(78804, include_characters=True, include_artworks=True)
+
+    patched_tools.get_series_extended.assert_called_once_with(
+        78804,
+        include_characters=True,
+        include_artworks=True,
+    )
+
+
+# ======================================================================
+# tvdb_get_series_by_slug
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_series_by_slug(patched_tools) -> None:
+    """tvdb_get_series_by_slug calls client with slug."""
+    result = await tvdb_get_series_by_slug("doctor-who")
+
+    patched_tools.get_series_by_slug.assert_called_once_with("doctor-who")
+    assert result["id"] == 1
+
+
+# ======================================================================
+# tvdb_get_season
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_season(patched_tools) -> None:
+    """tvdb_get_season calls client.get_season."""
+    result = await tvdb_get_season(12345)
+
+    patched_tools.get_season.assert_called_once_with(12345)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# tvdb_get_season_extended
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_season_extended(patched_tools) -> None:
+    """tvdb_get_season_extended calls client.get_season_extended."""
+    result = await tvdb_get_season_extended(12345)
+
+    patched_tools.get_season_extended.assert_called_once_with(12345)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# tvdb_get_artwork
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_artwork(patched_tools) -> None:
+    """tvdb_get_artwork calls client.get_artwork."""
+    result = await tvdb_get_artwork(67890)
+
+    patched_tools.get_artwork.assert_called_once_with(67890)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# tvdb_get_artwork_extended
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_artwork_extended(patched_tools) -> None:
+    """tvdb_get_artwork_extended calls client.get_artwork_extended."""
+    result = await tvdb_get_artwork_extended(67890)
+
+    patched_tools.get_artwork_extended.assert_called_once_with(67890)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# tvdb_get_episode
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_episode(patched_tools) -> None:
+    """tvdb_get_episode calls client.get_episode."""
+    result = await tvdb_get_episode(11111)
+
+    patched_tools.get_episode.assert_called_once_with(11111)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# tvdb_get_episode_extended
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_episode_extended(patched_tools) -> None:
+    """tvdb_get_episode_extended calls client.get_episode_extended."""
+    result = await tvdb_get_episode_extended(11111)
+
+    patched_tools.get_episode_extended.assert_called_once_with(11111)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# tvdb_get_person
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_person(patched_tools) -> None:
+    """tvdb_get_person calls client.get_person."""
+    result = await tvdb_get_person(22222)
+
+    patched_tools.get_person.assert_called_once_with(22222)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# tvdb_get_person_extended
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_person_extended(patched_tools) -> None:
+    """tvdb_get_person_extended calls client.get_person_extended."""
+    result = await tvdb_get_person_extended(22222)
+
+    patched_tools.get_person_extended.assert_called_once_with(22222)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# init_tools
+# ======================================================================
+
+
+def test_init_tools_creates_client() -> None:
+    """init_tools creates and sets the shared client."""
+    with patch("thetvdb_mcp_server.tools.TvdbClient") as MockClient:
+        mock_instance = MagicMock()
+        MockClient.return_value = mock_instance
+
+        config = make_config()
+        init_tools(config)
+
+        MockClient.assert_called_once()
+        args = MockClient.call_args
+        assert args[1]["api_key"] == "test-key"
+        assert args[1]["pin"] is None
+        assert args[1]["primary_language"] is None
+
+
+def test_init_tools_with_primary_language() -> None:
+    """init_tools passes primary_language to client when configured."""
+    with patch("thetvdb_mcp_server.tools.TvdbClient") as MockClient:
+        config = make_config(primary_language="eng")
+        init_tools(config)
+
+        args = MockClient.call_args
+        assert args[1]["primary_language"] == "eng"
+
+
+# ======================================================================
+# Error paths — _client is None
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_search_raises_without_init() -> None:
+    """tvdb_search raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_search_with_lang("test")
+
+
+@pytest.mark.asyncio
+async def test_episodes_raises_without_init() -> None:
+    """tvdb_get_series_episodes raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_series_episodes_with_lang(78804, "default")
+
+
+@pytest.mark.asyncio
+async def test_get_series_raises_without_init() -> None:
+    """tvdb_get_series raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_series(78804)
+
+
+@pytest.mark.asyncio
+async def test_get_series_extended_raises_without_init() -> None:
+    """tvdb_get_series_extended raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_series_extended(78804)
+
+
+@pytest.mark.asyncio
+async def test_get_series_by_slug_raises_without_init() -> None:
+    """tvdb_get_series_by_slug raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_series_by_slug("test")
+
+
+@pytest.mark.asyncio
+async def test_get_season_raises_without_init() -> None:
+    """tvdb_get_season raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_season(12345)
+
+
+@pytest.mark.asyncio
+async def test_get_season_extended_raises_without_init() -> None:
+    """tvdb_get_season_extended raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_season_extended(12345)
+
+
+@pytest.mark.asyncio
+async def test_get_artwork_raises_without_init() -> None:
+    """tvdb_get_artwork raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_artwork(67890)
+
+
+@pytest.mark.asyncio
+async def test_get_artwork_extended_raises_without_init() -> None:
+    """tvdb_get_artwork_extended raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_artwork_extended(67890)
+
+
+@pytest.mark.asyncio
+async def test_get_episode_raises_without_init() -> None:
+    """tvdb_get_episode raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_episode(11111)
+
+
+@pytest.mark.asyncio
+async def test_get_episode_extended_raises_without_init() -> None:
+    """tvdb_get_episode_extended raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_episode_extended(11111)
+
+
+@pytest.mark.asyncio
+async def test_get_person_raises_without_init() -> None:
+    """tvdb_get_person raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_person(22222)
+
+
+@pytest.mark.asyncio
+async def test_get_person_extended_raises_without_init() -> None:
+    """tvdb_get_person_extended raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_person_extended(22222)

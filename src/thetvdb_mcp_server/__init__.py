@@ -1,1 +1,1 @@
-"""Transmission MCP server package."""
+"""thetvdb-mcp-server package."""

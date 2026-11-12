@@ -1,15 +1,12 @@
-"""MCP tool implementations for the thetvdb-mcp-server server."""
+"""MCP tool implementations for thetvdb-mcp-server."""
 
-from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from thetvdb_mcp_server.config import AppConfig
 from thetvdb_mcp_server.rate_limiter import tvdb_rate_limiter
 from thetvdb_mcp_server.tvdb_client import TvdbClient
 
 _client: TvdbClient | None = None
-_EPISODE_FIELDS = {"aired", "number", "seasonNumber", "name"}
 
 
 def init_tools(config: AppConfig) -> None:
@@ -18,7 +15,7 @@ def init_tools(config: AppConfig) -> None:
     Must be called once at startup before any TVDB tool is invoked.
 
     Args:
-        config: Fully loaded application configuration.
+        config: Loaded application configuration.
     """
     global _client
     _client = TvdbClient(
@@ -29,211 +26,376 @@ def init_tools(config: AppConfig) -> None:
     )
 
 
-def get_current_datetime(timezone: str) -> str:
-    """Return the current date and time in the given IANA timezone.
-
-    Use this tool when you need to know the current date or time, for example
-    to determine whether a series is currently airing or to calculate how long
-    ago an episode aired.
-
-    Args:
-        timezone: IANA timezone name, e.g. ``"America/Edmonton"``,
-            ``"Europe/London"``, or ``"UTC"``.
-
-    Returns:
-        ISO 8601 datetime string with UTC offset, e.g.
-        ``"2026-03-06T07:30:00-07:00"``.
-
-    Raises:
-        ValueError: If ``timezone`` is not a valid IANA timezone name.
-    """
-    try:
-        tz = ZoneInfo(timezone)
-    except ZoneInfoNotFoundError:
-        raise ValueError(f"Unknown timezone: {timezone!r}") from None
-    return datetime.now(tz).isoformat()
+# ======================================================================
+# Private core implementations for dual-variant tools
+# ======================================================================
 
 
-def convert_datetime_timezone(
-    input_datetime: str,
-    input_timezone: str,
-    output_timezone: str,
-) -> dict[str, str]:
-    """Convert a local datetime from one IANA timezone to another.
-
-    Use this tool when you know an airtime in one timezone and need the
-    equivalent local time elsewhere.
-
-    Args:
-        input_datetime: Local datetime in ISO 8601 format *without* a UTC offset,
-            e.g. ``"2026-01-15T23:00:00"`` or ``"2026-01-15 23:00"``.
-        input_timezone: IANA timezone for the input datetime, e.g. ``"Asia/Tokyo"``.
-        output_timezone: IANA timezone to convert into, e.g. ``"America/Edmonton"``.
-
-    Returns:
-        A dict containing both the source and converted datetimes as ISO 8601
-        strings with UTC offsets, plus timezone abbreviations.
-
-    Raises:
-        ValueError: If either timezone is invalid, if ``input_datetime`` is not
-            parseable as ISO 8601, or if ``input_datetime`` already includes a
-            UTC offset.
-    """
-    try:
-        parsed_input = datetime.fromisoformat(input_datetime)
-    except ValueError as exc:
-        raise ValueError(
-            "input_datetime must be a valid ISO 8601 date/time string, for example '2026-01-15T23:00:00'"
-        ) from exc
-
-    if parsed_input.tzinfo is not None:
-        raise ValueError("input_datetime must not include a UTC offset; pass input_timezone separately")
-
-    source_tz = _get_timezone(input_timezone)
-    target_tz = _get_timezone(output_timezone)
-
-    source_datetime = parsed_input.replace(tzinfo=source_tz)
-    converted_datetime = source_datetime.astimezone(target_tz)
-
-    return {
-        "input_datetime": source_datetime.isoformat(),
-        "input_timezone": input_timezone,
-        "input_timezone_abbreviation": source_datetime.tzname() or input_timezone,
-        "output_datetime": converted_datetime.isoformat(),
-        "output_timezone": output_timezone,
-        "output_timezone_abbreviation": converted_datetime.tzname() or output_timezone,
-    }
-
-
-def health_check() -> dict[str, str]:
-    """Return a simple health status indicating the server is running.
-
-    Returns:
-        A dict with a single ``status`` key set to ``"ok"``.
-    """
-    return {"status": "ok"}
-
-
-async def tvdb_get_series(series_id: int) -> dict[str, Any]:
-    """Fetch the base record for a single TV series by its TVDB ID.
-
-    Use this tool when you already know the TVDB series ID and need the full
-    series record, including network, status, genres, and image information.
-    To find a series ID first, use ``tvdb_search_series``.
-
-    Args:
-        series_id: Numeric TVDB series ID, e.g. ``78804`` for Doctor Who.
-
-    Returns:
-        The series base record dict from the TVDB ``data`` field. Common fields
-        include ``id``, ``name``, ``slug``, ``image``, ``firstAired``,
-        ``lastAired``, ``status``, ``originalNetwork``, and ``genres``.
-    """
-    assert _client is not None, "init_tools() must be called before using tools"
-    return await _client.get_series(series_id)
-
-
-async def tvdb_get_series_naming_bundle(
-    series_id: int,
-    season_type: str | None = None,
-    lang: str | None = None,
-) -> dict[str, Any] | list[dict[str, Any]]:
-    """Fetch naming and episode data for a TV series from TVDB.
-
-    This tool operates in two modes depending on whether ``season_type`` is
-    provided.
-
-    **Mode 1 — Series record** (``season_type`` omitted):
-    Returns the series base record dict (identical to ``tvdb_get_series``).
-    Use this when you need series-level metadata such as name, network, status,
-    and genre without episode detail.
-
-    **Mode 2 — Episode list** (``season_type`` provided, ``lang`` omitted):
-    Returns a combined list of every episode dict across all pages for the
-    requested season ordering. Pagination is handled automatically.
-
-    **Mode 3 — Translated episode list** (``season_type`` and ``lang`` both
-    provided):
-    Same as Mode 2 but requests episode data translated into the specified
-    language. Pagination is handled automatically.
-
-    Args:
-        series_id: Numeric TVDB series ID, e.g. ``78804`` for Doctor Who.
-        season_type: Season ordering to use when fetching episodes. Omit for
-            Mode 1 (series record). Valid values:
-
-            - ``"official"`` — broadcast/streaming order (most common).
-            - ``"dvd"`` — DVD release order; may differ from air order.
-            - ``"absolute"`` — single sequential number across all seasons;
-              common for anime.
-            - ``"alternate"`` — an alternative ordering defined by the
-              community.
-            - ``"regional"`` — ordering used in a specific region.
-            - ``"default"`` — the series default ordering as set on TVDB.
-        lang: Two or three character language code (e.g. ``"eng"``, ``"deu"``)
-            for translated episode data. Only used in Mode 3; ignored when
-            ``season_type`` is omitted.
-
-    Returns:
-        - **Mode 1**: Series base record dict (see ``tvdb_get_series`` for
-          field details).
-        - **Mode 2 / Mode 3**: A flat list of episode dicts. Common fields
-          include ``id``, ``name``, ``seasonNumber``, ``number``,
-          ``aired``, and ``overview``.
-    """
-    assert _client is not None, "init_tools() must be called before using tools"
-
-    if season_type is None:
-        return await _client.get_series(series_id)
-
-    episodes: list[dict[str, Any]] = []
-    page = 0
-    while True:
-        response = await _client.get_series_episodes(series_id, season_type=season_type, lang=lang, page=page)
-        page_episodes: list[dict[str, Any]] = response.get("episodes", [])
-        if not page_episodes:
-            break
-        episodes.extend(page_episodes)
-        page += 1
-    return [{k: v for k, v in ep.items() if k in _EPISODE_FIELDS} for ep in episodes]
-
-
-async def tvdb_search_series(
+async def _search_impl(
     query: str,
+    type_: str | None,
+    year: int | None,
+    offset: int,
+    limit: int,
+    primary_language: str | None,
+) -> list[dict[str, Any]]:
+    """Core search implementation shared by both language variants."""
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.search(
+        query=query,
+        type_=type_,
+        year=year,
+        offset=offset,
+        limit=limit,
+        primary_language=primary_language,
+    )
+
+
+async def _get_series_episodes_impl(
+    series_id: int,
+    season_type: str,
+    page: int,
+    lang: str | None,
+) -> dict[str, Any]:
+    """Core implementation for fetching series episodes shared by both language variants."""
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_series_episodes(
+        series_id=series_id,
+        season_type=season_type,
+        page=page,
+        lang=lang,
+    )
+
+
+# ======================================================================
+# tvdb_search — two variants depending on primary_language config
+# ======================================================================
+
+
+async def tvdb_search_with_lang(
+    query: str,
+    type: str | None = None,
+    year: int | None = None,
+    offset: int = 0,
+    limit: int = 10,
+    primary_language: str | None = None,
+) -> list[dict[str, Any]]:
+    """Search TVDB for series, movies, people, episodes, and more.
+
+    Searches for series, movies, people, episodes, etc. by title, alias,
+    and translation. Returns up to `limit` results (default 10).
+
+    Args:
+        query: Search text to match against titles, aliases, and translations.
+        type: Filter by entity type. One of: series, movie, person, episode,
+            artwork, award, awardCategory, company, country, genre, language,
+            sourceType, peopleType, season, seasonType, tag, user. Omit to
+            search all types.
+        year: Restrict results to items first aired or released in this year.
+        offset: Number of results to skip (pagination).
+        limit: Maximum number of results to return. Defaults to 10.
+        primary_language: 3-character ISO 639-2 language code (e.g. "eng").
+
+    Returns:
+        List of unfiltered search result objects.
+    """
+    return await _search_impl(
+        query=query,
+        type_=type,
+        year=year,
+        offset=offset,
+        limit=limit,
+        primary_language=primary_language,
+    )
+
+
+async def tvdb_search_without_lang(
+    query: str,
+    type: str | None = None,
     year: int | None = None,
     offset: int = 0,
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    """Search TVDB for TV series matching a query string.
+    """Search TVDB for series, movies, people, episodes, and more.
 
-    Use this tool to find a series by title, alias, or translation. It is the
-    first step when you need a TVDB series ID before fetching full series
-    details or episode lists.
-
-    If a ``primary_language`` is configured, results are restricted to series
-    in that language.
+    Searches for series, movies, people, episodes, etc. by title, alias,
+    and translation. Uses the server's configured primary language.
+    Returns up to `limit` results (default 10).
 
     Args:
-        query: Search string. Matched against series titles, aliases, and
-            translations. Required.
-        year: Optional four-digit year to restrict results to series that
-            first aired in that year. Omit to search all years.
-        offset: Number of results to skip, for pagination. Defaults to ``0``.
-        limit: Maximum number of results to return. Defaults to ``10``.
-            The TVDB search index supports up to 5 000 results total.
+        query: Search text to match against titles, aliases, and translations.
+        type: Filter by entity type. One of: series, movie, person, episode,
+            artwork, award, awardCategory, company, country, genre, language,
+            sourceType, peopleType, season, seasonType, tag, user. Omit to
+            search all types.
+        year: Restrict results to items first aired or released in this year.
+        offset: Number of results to skip (pagination).
+        limit: Maximum number of results to return. Defaults to 10.
 
     Returns:
-        A list of series result dicts from the TVDB ``data`` field. Common
-        fields in each dict include ``objectID``, ``name``, ``first_air_time``,
-        ``image_url``, ``overview``, ``status``, and ``tvdb_id``.
+        List of unfiltered search result objects.
     """
-    assert _client is not None, "init_tools() must be called before using tools"
-    return await _client.search(query, type_="series", year=year, offset=offset, limit=limit)
+    return await _search_impl(
+        query=query,
+        type_=type,
+        year=year,
+        offset=offset,
+        limit=limit,
+        primary_language=None,
+    )
 
 
-def _get_timezone(timezone: str) -> ZoneInfo:
-    """Return a ZoneInfo object for a valid IANA timezone name."""
-    try:
-        return ZoneInfo(timezone)
-    except ZoneInfoNotFoundError:
-        raise ValueError(f"Unknown timezone: {timezone!r}") from None
+# ======================================================================
+# tvdb_get_series_episodes — two variants depending on primary_language config
+# ======================================================================
+
+
+async def tvdb_get_series_episodes_with_lang(
+    series_id: int,
+    season_type: str,
+    page: int = 0,
+    lang: str | None = None,
+) -> dict[str, Any]:
+    """Fetch all episodes for a series by season ordering type.
+
+    Valid season_type values: default, aired, dvd, digital, streaming,
+    absolute, alternate, regional.
+
+    Args:
+        series_id: Numeric TVDB series ID.
+        season_type: Season ordering. Valid values: default, aired, dvd,
+            digital, streaming, absolute, alternate, regional.
+        page: Page number for pagination.
+        lang: 3-character ISO 639-2 language code (e.g. "eng").
+
+    Returns:
+        Unfiltered episodes response containing `series` and `episodes` keys.
+    """
+    return await _get_series_episodes_impl(
+        series_id=series_id,
+        season_type=season_type,
+        page=page,
+        lang=lang,
+    )
+
+
+async def tvdb_get_series_episodes_without_lang(
+    series_id: int,
+    season_type: str,
+    page: int = 0,
+) -> dict[str, Any]:
+    """Fetch all episodes for a series by season ordering type.
+
+    Uses the server's configured primary language. Valid season_type
+    values: default, aired, dvd, digital, streaming, absolute, alternate,
+    regional.
+
+    Args:
+        series_id: Numeric TVDB series ID.
+        season_type: Season ordering. Valid values: default, aired, dvd,
+            digital, streaming, absolute, alternate, regional.
+        page: Page number for pagination.
+
+    Returns:
+        Unfiltered episodes response containing `series` and `episodes` keys.
+    """
+    return await _get_series_episodes_impl(
+        series_id=series_id,
+        season_type=season_type,
+        page=page,
+        lang=None,
+    )
+
+
+# ======================================================================
+# Series tools
+# ======================================================================
+
+
+async def tvdb_get_series(series_id: int) -> dict[str, Any]:
+    """Fetch a series base record by its numeric TVDB ID.
+
+    Args:
+        series_id: Numeric TVDB series ID.
+
+    Returns:
+        Unfiltered series base record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_series(series_id)
+
+
+async def tvdb_get_series_extended(
+    series_id: int,
+    include_characters: bool = False,
+    include_artworks: bool = False,
+) -> dict[str, Any]:
+    """Fetch a series extended record with optional characters and artworks.
+
+    The `characters` and `artworks` arrays are only included when the
+    respective `include_*` parameter is True.
+
+    Args:
+        series_id: Numeric TVDB series ID.
+        include_characters: When True, includes the `characters` array.
+        include_artworks: When True, includes the `artworks` array.
+
+    Returns:
+        Series extended record with requested arrays.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_series_extended(
+        series_id,
+        include_characters=include_characters,
+        include_artworks=include_artworks,
+    )
+
+
+async def tvdb_get_series_by_slug(slug: str) -> dict[str, Any]:
+    """Fetch a series record by its slug.
+
+    Args:
+        slug: Series slug, e.g. "doctor-who".
+
+    Returns:
+        Unfiltered series record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_series_by_slug(slug)
+
+
+# ======================================================================
+# Season tools
+# ======================================================================
+
+
+async def tvdb_get_season(season_id: int) -> dict[str, Any]:
+    """Fetch a season base record by its numeric TVDB ID.
+
+    Args:
+        season_id: Numeric TVDB season ID.
+
+    Returns:
+        Unfiltered season base record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_season(season_id)
+
+
+async def tvdb_get_season_extended(season_id: int) -> dict[str, Any]:
+    """Fetch a season extended record by its numeric TVDB ID.
+
+    Args:
+        season_id: Numeric TVDB season ID.
+
+    Returns:
+        Unfiltered season extended record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_season_extended(season_id)
+
+
+# ======================================================================
+# Artwork tools
+# ======================================================================
+
+
+async def tvdb_get_artwork(artwork_id: int) -> dict[str, Any]:
+    """Fetch an artwork base record by its numeric TVDB ID.
+
+    Args:
+        artwork_id: Numeric TVDB artwork ID.
+
+    Returns:
+        Unfiltered artwork base record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_artwork(artwork_id)
+
+
+async def tvdb_get_artwork_extended(artwork_id: int) -> dict[str, Any]:
+    """Fetch an artwork extended record by its numeric TVDB ID.
+
+    Args:
+        artwork_id: Numeric TVDB artwork ID.
+
+    Returns:
+        Unfiltered artwork extended record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_artwork_extended(artwork_id)
+
+
+# ======================================================================
+# Episode tools
+# ======================================================================
+
+
+async def tvdb_get_episode(episode_id: int) -> dict[str, Any]:
+    """Fetch an episode base record by its numeric TVDB ID.
+
+    Args:
+        episode_id: Numeric TVDB episode ID.
+
+    Returns:
+        Unfiltered episode base record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_episode(episode_id)
+
+
+async def tvdb_get_episode_extended(episode_id: int) -> dict[str, Any]:
+    """Fetch an episode extended record by its numeric TVDB ID.
+
+    Args:
+        episode_id: Numeric TVDB episode ID.
+
+    Returns:
+        Unfiltered episode extended record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_episode_extended(episode_id)
+
+
+# ======================================================================
+# Person tools
+# ======================================================================
+
+
+async def tvdb_get_person(person_id: int) -> dict[str, Any]:
+    """Fetch a person base record by their numeric TVDB ID.
+
+    Args:
+        person_id: Numeric TVDB person ID.
+
+    Returns:
+        Unfiltered person base record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_person(person_id)
+
+
+async def tvdb_get_person_extended(person_id: int) -> dict[str, Any]:
+    """Fetch a person extended record by their numeric TVDB ID.
+
+    Args:
+        person_id: Numeric TVDB person ID.
+
+    Returns:
+        Unfiltered person extended record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_person_extended(person_id)

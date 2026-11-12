@@ -39,6 +39,7 @@ lib64/
 .coverage
 .coverage.*
 .cache
+.ruff_cache/
 nosetests.xml
 coverage.xml
 *.cover
@@ -130,3 +131,6 @@ logs/
 # Node.js
 node_modules/
 .aider*
+
+# CodeGraphContext
+.cgcignore

@@ -3,9 +3,9 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE.txt)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/downloads/)
 
-A bare-bones [FastMCP](https://github.com/jlowin/fastmcp) server template. Use this as a starting point to build your own MCP server without starting from scratch.
+A [FastMCP](https://github.com/jlowin/fastmcp) server that exposes [TVDB](https://thetvdb.com/) v4 API endpoints as tools for AI assistants.
 
-[MCP (Model Context Protocol)](https://modelcontextprotocol.io/) is an open standard that lets AI assistants call external tools and services. This template implements MCP over HTTP so any MCP-compatible AI application can reach your server.
+[MCP (Model Context Protocol)](https://modelcontextprotocol.io/) is an open standard that lets AI assistants call external tools and services. This server implements MCP over HTTP so any MCP-compatible AI application can query TV series information from TVDB.
 
 ---
 
@@ -13,36 +13,6 @@ A bare-bones [FastMCP](https://github.com/jlowin/fastmcp) server template. Use t
 
 - **Docker** — for the Docker Compose deployment path
 - **uv** — for the source deployment path (see [Installing uv](https://docs.astral.sh/uv/getting-started/installation/))
-- **Node.js** — required for the git commit hooks; the hooks use [commitlint](https://commitlint.js.org/) to enforce Conventional Commits, which is the best-in-class Node.js tool for commit message validation
-
----
-
-## Customising the Template
-
-### 1. Copy the template
-
-**On GitHub** — click **Use this template → Create a new repository**. This creates a clean copy with no fork relationship and no template history.
-
-**Without GitHub** — clone, strip the history, and reinitialise:
-
-```bash
-git clone https://github.com/sesopenko/thetvdb-mcp-server.git my-project
-cd my-project
-rm -rf .git
-git init
-git add .
-git commit -m "chore: bootstrap from thetvdb-mcp-server template"
-```
-
-### 2. Customise identity values
-
-Edit `project.env` to set your own values (Docker image name, package name, project name, description), then run the setup script to substitute them throughout the repository:
-
-```bash
-bash scripts/apply-project-config.sh
-```
-
-The script is idempotent — safe to run multiple times.
 
 ---
 
@@ -55,7 +25,7 @@ The script is idempotent — safe to run multiple times.
    ```yaml
    services:
      thetvdb-mcp-server:
-       image: sesopenko/thetvdb-mcp-server:latest
+       image: thetvdb-mcp-server:latest
        ports:
          - "8080:8080"
        volumes:
@@ -120,20 +90,40 @@ port = 8080
 
 [logging]
 level = "info"
+
+[tvdb]
+api_key = "YOUR_API_KEY"
+# Optional: 3-character ISO 639-2 language code (e.g. "eng")
+# primary_language = "eng"
 ```
 
 ### [server]
 
 | Key | Default | Description |
 |---|---|---|
-| `host` | `"0.0.0.0"` | Address the MCP server listens on. `0.0.0.0` binds all interfaces. |
-| `port` | `8080` | Port the MCP server listens on. |
+| `host` | `"0.0.0.0"` | Address for the MCP server to listen on. `0.0.0.0` binds all interfaces. |
+| `port` | `8080` | Port for the MCP server to listen on. |
 
 ### [logging]
 
 | Key | Default | Description |
 |---|---|---|
-| `level` | `"info"` | Log verbosity. One of: `debug`, `info`, `warning`, `error`. |
+| `level` | `"info"` | Log verbosity. One of: `trace`, `debug`, `info`, `warning`, `error`, `critical`. |
+
+### [tvdb]
+
+| Key | Default | Description |
+|---|---|---|
+| `api_key` | *(required)* | Your TVDB API key. |
+| `pin` | `null` | Optional subscriber PIN for extended access. |
+| `primary_language` | `null` | Optional 3-character ISO 639-2 language code (e.g. `"eng"`). See below for how this affects tool schemas. |
+
+#### Primary language behaviour
+
+The `primary_language` setting controls how language parameters appear in the tool schemas for `tvdb_search` and `tvdb_get_series_episodes`:
+
+- **When `primary_language` is set:** The language parameters are hidden from the tool schemas. The configured language is applied automatically to all search and episode queries.
+- **When `primary_language` is not set:** The language parameters (`primary_language` on search, `lang` on episodes) are exposed as optional tool arguments. Callers can specify a language per-query or omit it for all-language results.
 
 ---
 
@@ -165,20 +155,35 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
 
 > **Tip — let an LLM write this for you.** XML-structured system prompts are effective but unfamiliar to most developers and tedious to write by hand. A quick conversation with any capable LLM (describe your tools, what they do, and how you want the assistant to behave) will produce a well-structured prompt you can drop straight in. The results are often better than anything written manually as plain text or markdown.
 >
-> * XML tags act like labeled folders — the model knows exactly where each piece of information starts and stops
+> * XML tags act like labeled folders — the model knows exactly where each piece of information starts and ends
 > * Training data is full of structured markup, so models already "think" in tags naturally
 > * Tags prevent the model from confusing your instructions with the content it's working on
 ```xml
 <system>
   <role>
-    You are a helpful assistant with access to an MCP server. Use the available
-    tools to fulfil user requests accurately and efficiently.
+    You are a helpful assistant with access to a TVDB MCP server. Use the available
+    tools to look up TV series information accurately and efficiently.
   </role>
   <tools>
-    <tool name="health_check">Check that the MCP server is running and reachable.</tool>
+    <tool name="tvdb_search">Search TVDB for series, movies, people, episodes, and more by title, alias, or translation. Returns up to 10 results by default.</tool>
+    <tool name="tvdb_get_series">Fetch a series base record by its numeric TVDB ID.</tool>
+    <tool name="tvdb_get_series_extended">Fetch a series extended record with optional characters and artworks arrays.</tool>
+    <tool name="tvdb_get_series_episodes">Fetch all episodes for a series by season ordering type.</tool>
+    <tool name="tvdb_get_series_by_slug">Fetch a series record by its slug (e.g. "doctor-who").</tool>
+    <tool name="tvdb_get_season">Fetch a season base record by its numeric TVDB ID.</tool>
+    <tool name="tvdb_get_season_extended">Fetch a season extended record by its numeric TVDB ID.</tool>
+    <tool name="tvdb_get_artwork">Fetch an artwork base record by its numeric TVDB ID.</tool>
+    <tool name="tvdb_get_artwork_extended">Fetch an artwork extended record by its numeric TVDB ID.</tool>
+    <tool name="tvdb_get_episode">Fetch an episode base record by its numeric TVDB ID.</tool>
+    <tool name="tvdb_get_episode_extended">Fetch an episode extended record by its numeric TVDB ID.</tool>
+    <tool name="tvdb_get_person">Fetch a person base record by their numeric TVDB ID.</tool>
+    <tool name="tvdb_get_person_extended">Fetch a person extended record by their numeric TVDB ID.</tool>
   </tools>
   <guidelines>
-    <item>Call health_check if the user asks whether the server is available.</item>
+    <item>Use tvdb_search to find a TVDB ID before calling other tools that require one.</item>
+    <item>Use tvdb_get_series_extended with include_characters or include_artworks only when the user needs that data, as those arrays can be large.</item>
+    <item>Use tvdb_get_series_episodes to retrieve episode lists; specify season_type (e.g. "default", "aired", "dvd") as needed.</item>
+    <item>If you only have a series title and not an ID, search first — never guess IDs.</item>
   </guidelines>
 </system>
 ```
@@ -187,34 +192,54 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
 
 ## Available Tools
 
-| Tool | Description                                                                             |
-|---|-----------------------------------------------------------------------------------------|
-| `health_check` | Returns `{"status": "ok"}` to confirm the server is running.                            |
-| `tvdb_search_series` | Search TVDB for TV series by title, with optional year filter and pagination.           |
-| `tvdb_get_series` | Fetch the full base record for a TV series by its TVDB ID.                              |
-| `tvdb_get_series_naming_bundle` | Fetch series metadata or a complete paginated episode list for a given season ordering. |
-| `get_current_datetime` | Returns the current date and time for a given IANA timezone as an ISO 8601 string.      |
-| `convert_datetime_timezone` | Converts a time from one IANA timezone to IANA another. |
-
-> Tools are documented here as they are implemented.
+| Tool | Description |
+|---|---|
+| `tvdb_search` | Search TVDB for series, movies, people, episodes, and more. Returns up to 10 results by default. |
+| `tvdb_get_series` | Fetch a series base record by its numeric TVDB ID. |
+| `tvdb_get_series_extended` | Fetch a series extended record with optional characters and artworks arrays. |
+| `tvdb_get_series_episodes` | Fetch all episodes for a series by season ordering type. |
+| `tvdb_get_series_by_slug` | Fetch a series record by its slug (e.g. "doctor-who"). |
+| `tvdb_get_season` | Fetch a season base record by its numeric TVDB ID. |
+| `tvdb_get_season_extended` | Fetch a season extended record by its numeric TVDB ID. |
+| `tvdb_get_artwork` | Fetch an artwork base record by its numeric TVDB ID. |
+| `tvdb_get_artwork_extended` | Fetch an artwork extended record by its numeric TVDB ID. |
+| `tvdb_get_episode` | Fetch an episode base record by its numeric TVDB ID. |
+| `tvdb_get_episode_extended` | Fetch an episode extended record by its numeric TVDB ID. |
+| `tvdb_get_person` | Fetch a person base record by their numeric TVDB ID. |
+| `tvdb_get_person_extended` | Fetch a person extended record by their numeric TVDB ID. |
 
 ---
 
 ## Architecture
 
-The template follows a clean three-layer separation:
+The server follows a clean separation of concerns:
 
 | File | Purpose |
 |---|---|
-| `src/thetvdb_mcp_server/tools.py` | Pure Python functions — one function per tool, no framework coupling |
-| `src/thetvdb_mcp_server/server.py` | FastMCP wiring — registers tool functions with `@mcp.tool()` and runs the server |
-| `src/thetvdb_mcp_server/config.py` | TOML config loading — typed dataclasses for `[server]` and `[logging]` sections |
-| `src/thetvdb_mcp_server/logging.py` | Structured logger factory |
+| `src/thetvdb_mcp_server/tools.py` | Tool implementations — one function per tool, no framework coupling |
+| `src/thetvdb_mcp_server/server.py` | FastMCP wiring — dynamic tool registration and server entrypoint |
+| `src/thetvdb_mcp_server/tvdb_client.py` | TVDB API client — wraps the official library with rate limiting |
+| `src/thetvdb_mcp_server/rate_limiter.py` | Async rate limiter — enforces 1 TVDB API call per second |
+| `src/thetvdb_mcp_server/config.py` | TOML config loading — typed dataclasses for `[server]`, `[logging]`, and `[tvdb]` sections |
+| `src/thetvdb_mcp_server/logging.py` | Structured JSON logger |
+
+### Dynamic tool registration
+
+Tools are not registered via `@mcp.tool()` decorators at import time. Instead, `main()` in `server.py` loads configuration, initialises the shared TVDB client, and then explicitly registers each tool. This allows the tool schema to depend on runtime configuration.
+
+### Two-implementation pattern
+
+Two tools — `tvdb_search` and `tvdb_get_series_episodes` — have two implementation variants each:
+
+- **With language:** Exposes a language parameter when `primary_language` is not set in config.
+- **Without language:** Omits the language parameter when `primary_language` is set; the configured language is applied automatically.
+
+At startup, `main()` registers exactly one variant of each based on the configuration. Each pair shares a private core implementation to avoid duplicating logic.
 
 ### Adding a tool
 
 1. Add a function to `src/thetvdb_mcp_server/tools.py` with a Google-style docstring and full type annotations.
-2. Import the function in `src/thetvdb_mcp_server/server.py` and register it with `@mcp.tool()`.
+2. Register it in `main()` in `src/thetvdb_mcp_server/server.py` via `mcp.tool(name="...")(function)`.
 3. Add a unit test in `tests/unit/`.
 4. Add a row to the **Available Tools** table in this README.
 
@@ -230,7 +255,7 @@ uv run pytest tests/unit/
 
 ## Contributing / Maintaining
 
-See [MAINTAINERS.md](MAINTAINERS.md) for setup, development commands, AI agent rails, and how to run tests.
+See [MAINTAINERS.md](MAINTAINERS.md) for setup, development commands, and how to run tests.
 
 ---
 

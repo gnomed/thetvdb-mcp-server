@@ -60,9 +60,9 @@ def test_entry_has_metadata_field(capsys: pytest.CaptureFixture[str]) -> None:
 def test_metadata_included_when_provided(capsys: pytest.CaptureFixture[str]) -> None:
     """Metadata key/value pairs passed as kwargs appear in the emitted entry."""
     logger = make_logger("trace")
-    logger.info("event", tool="list_torrents", count=3)
+    logger.info("event", tool="tvdb_search", count=3)
     entries = captured_entries(capsys)
-    assert entries[0]["metadata"] == {"tool": "list_torrents", "count": 3}
+    assert entries[0]["metadata"] == {"tool": "tvdb_search", "count": 3}
 
 
 def test_metadata_empty_when_not_provided(capsys: pytest.CaptureFixture[str]) -> None:
