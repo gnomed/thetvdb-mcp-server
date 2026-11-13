@@ -49,28 +49,34 @@ async def tvdb_search(
     director: str | None = None,
     remote_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Search TVDB for series, movies, people, episodes, and more.
+    """Search TVDB for series, movies, people, and more.
 
-    Searches for series, movies, people, episodes, etc. by title, alias,
-    and translation. Returns up to `limit` results (default 10).
+    Searches by title, alias, and translation. Returns up to `limit`
+    results (default 10).
 
-    TIP: Use the `type` parameter to narrow results and avoid getting
-    irrelevant matches. If you're looking for a specific show, set
-    type="series". If searching for a person, set type="person".
+    NOTE: The TVDB search index includes series, movies, people, and
+    companies. The `type` parameter only reliably filters these types.
+    type="episode", type="season", and type="artwork" will return empty
+    results.
+
+    TIP: Use the `type` parameter to narrow results. For a specific show,
+    set type="series". For a person, set type="person". The `remote_id`
+    parameter (e.g. IMDB ID) is the most precise search method.
 
     Args:
         query: Search text to match against titles, aliases, and translations.
-        type: Filter by entity type. One of: series, movie, person, episode,
-            artwork, award, awardCategory, company, country, genre, language,
-            sourceType, peopleType, season, seasonType, tag, user. Omit to
-            search all types.
+        type: Filter by entity type. One of: series, movie, person, company.
+            Omit to search all types. Other values (episode, season, artwork,
+            etc.) are accepted but return empty results.
         year: Restrict results to items first aired or released in this year.
+            Note: may broaden results rather than filter.
         offset: Number of results to skip (pagination).
         limit: Maximum number of results to return. Defaults to 10.
         primary_language: 3-character ISO 639-2 language code (e.g. "eng").
+            Note: may broaden results rather than filter.
         country: Restrict results to a specific country of origin. Should
             contain a 3 character country code (e.g. "USA"). Currently only
-            used for series and movies.
+            used for series and movies. Note: may return empty results.
         director: Restrict results to a specific director. Generally only
             used for movies. Should include the full name, e.g. "Steven Spielberg".
         remote_id: Search for a specific remote ID. Allows searching by
@@ -96,38 +102,25 @@ async def tvdb_search(
 
 async def tvdb_get_series_episodes(
     series_id: int,
-    season_type: str,
+    season_type: str | None = None,
     page: int = 0,
     lang: str | None = None,
-    season: int | None = None,
-    episode_number: int | None = None,
 ) -> dict[str, Any]:
-    """Fetch episodes for a series by season ordering type.
+    """Fetch episodes for a series.
 
-    By default returns ALL episodes for the series. Use `season` and/or
-    `episode_number` to narrow the results.
-
-    Valid season_type values: default, aired, dvd, digital, streaming,
-    absolute, alternate, regional.
-
-    TIP: If you need details for a specific episode, use both `season` and
-    `episode_number` to get exactly that episode instead of all episodes.
-    If you only specify `season`, you'll get all episodes in that season.
-    If you specify neither, you'll get every episode of the series (can be
-    very large for long-running shows).
+    Returns ALL episodes for the series. To get a specific season's
+    episodes, filter the results client-side by seasonNumber.
 
     Args:
         series_id: Numeric TVDB series ID.
-        season_type: Season ordering. Valid values: default, aired, dvd,
-            digital, streaming, absolute, alternate, regional.
-        page: Page number for pagination (default 0). Only relevant when
-            not filtering by season/episode_number.
+        season_type: Season ordering. Omit to use TVDB's default ordering.
+            Valid values: default, aired, dvd, digital, streaming, absolute,
+            alternate, regional. Only specify if you need a non-default
+            ordering — "default" works reliably, but other values (aired,
+            streaming, digital, alternate) may return empty results for
+            some series.
+        page: Page number for pagination (default 0).
         lang: 3-character ISO 639-2 language code (e.g. "eng").
-        season: Restrict results to a specific season number (default: all
-            seasons). Use 1-based season numbering.
-        episode_number: Restrict results to a specific episode number
-            (default: all episodes). Use 1-based episode numbering within
-            the season.
 
     Returns:
         Episodes response containing `series` and `episodes` keys.
@@ -139,8 +132,6 @@ async def tvdb_get_series_episodes(
         season_type=season_type,
         page=page,
         lang=lang,
-        season=season,
-        episode_number=episode_number,
     )
 
 

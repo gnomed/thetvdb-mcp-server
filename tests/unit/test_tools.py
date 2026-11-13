@@ -133,8 +133,6 @@ async def test_episodes_calls_client(patched_tools) -> None:
         season_type="default",
         page=0,
         lang=None,
-        season=None,
-        episode_number=None,
     )
     assert "episodes" in result
 
@@ -149,8 +147,6 @@ async def test_episodes_all_params(patched_tools) -> None:
         season_type="aired",
         page=2,
         lang="deu",
-        season=None,
-        episode_number=None,
     )
 
 

@@ -155,7 +155,7 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
     tools to look up TV series information accurately and efficiently.
   </role>
   <tools>
-    <tool name="tvdb_search">Search TVDB for series, movies, people, episodes, and more by title, alias, or translation. Returns up to 10 results by default.</tool>
+    <tool name="tvdb_search">Search TVDB for series, movies, people, and companies by title, alias, or translation. Returns up to 10 results by default.</tool>
     <tool name="tvdb_get_series">Fetch a series base record by its numeric TVDB ID.</tool>
     <tool name="tvdb_get_series_extended">Fetch a series extended record with optional characters and artworks arrays.</tool>
     <tool name="tvdb_get_series_episodes">Fetch all episodes for a series by season ordering type.</tool>
@@ -184,10 +184,10 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
 
 | Tool | Description |
 |---|---|
-| `tvdb_search` | Search TVDB for series, movies, people, episodes, and more. Returns up to 10 results by default. |
+| `tvdb_search` | Search TVDB for series, movies, people, and companies. Returns up to 10 results by default. |
 | `tvdb_get_series` | Fetch a series base record by its numeric TVDB ID. |
 | `tvdb_get_series_extended` | Fetch a series extended record with optional characters and artworks arrays. |
-| `tvdb_get_series_episodes` | Fetch all episodes for a series by season ordering type. |
+| `tvdb_get_series_episodes` | Fetch all episodes for a series. Returns ALL episodes; filter client-side. |
 | `tvdb_get_series_by_slug` | Fetch a series record by its slug (e.g. "doctor-who"). |
 | `tvdb_get_season` | Fetch a season base record by its numeric TVDB ID. |
 | `tvdb_get_season_extended` | Fetch a season extended record by its numeric TVDB ID. |
@@ -197,6 +197,20 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
 | `tvdb_get_episode_extended` | Fetch an episode extended record by its numeric TVDB ID. |
 | `tvdb_get_person` | Fetch a person base record by their numeric TVDB ID. |
 | `tvdb_get_person_extended` | Fetch a person extended record by their numeric TVDB ID. |
+
+---
+
+## Known Limitations (TVDB API)
+
+The following limitations are imposed by the TVDB API and/or the official Python library, not by this server:
+
+- **Search index**: The TVDB search index includes series, movies, people, and companies. Searching for episodes, seasons, or artwork (`type="episode"`, etc.) returns empty results.
+- **Search filtering**: The `year`, `primary_language`, and `country` parameters may broaden rather than filter results in some cases. The `remote_id` parameter (e.g. IMDB ID) is the most precise search method.
+- **Episode filtering**: `tvdb_get_series_episodes` returns ALL episodes for a series. The TVDB Python library does not support filtering by season or episode number. To get a specific season's episodes, filter the results client-side by `seasonNumber`.
+- **Season types**: `season_type="default"` works reliably. Other values (`aired`, `streaming`, `digital`, `alternate`) may return empty results for some series, depending on the TVDB database.
+- **Absolute season type**: `season_type="absolute"` returns a different response structure (flat object, no `series` wrapper) and sets `seasonNumber` to 1 for all episodes.
+- **Search result IDs**: Search returns prefixed IDs like `series-366924` or `person-7990590`. All `tvdb_get_*` tools expect pure numeric IDs — strip the prefix before use.
+- **Episode images**: Some episodes return full URLs, others return relative paths (`/banners/...`). Handle both formats.
 
 ---
 

@@ -194,22 +194,23 @@ class TvdbClient:
     async def get_series_episodes(
         self,
         series_id: int,
-        season_type: str = "default",
+        season_type: str | None = None,
         page: int = 0,
         lang: str | None = None,
-        season: int | None = None,
-        episode_number: int | None = None,
     ) -> dict:
-        """Fetch episodes for a series by season type with optional filters."""
+        """Fetch episodes for a series by season type.
+
+        If season_type is not specified, the TVDB library uses "default".
+        Note: The TVDB Python library does not support filtering by season
+        or episode number. To get a specific season's episodes, filter the
+        results client-side.
+        """
         params: dict[str, object] = {
-            "season_type": season_type,
             "page": page,
             "lang": lang,
         }
-        if season is not None:
-            params["season"] = season
-        if episode_number is not None:
-            params["episodeNumber"] = episode_number
+        if season_type is not None:
+            params["season_type"] = season_type
         async with self._rate_limiter:
             result = self._tvdb.get_series_episodes(series_id, **params)
 
