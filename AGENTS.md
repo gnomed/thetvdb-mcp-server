@@ -36,6 +36,12 @@ uv run pytest tests/unit/
 - Tests mock the client by patching the module global: `patch("thetvdb_mcp_server.tools._client", mock)`. See `tests/unit/test_tools.py` for the pattern.
 - No integration tests or external services required.
 
+## Committing and pushing
+
+- **Wait for user request**: Do not commit or push changes until the user explicitly asks for it.
+- Give the user a chance to review, approve, or request changes to the work before it is committed.
+- Only commit and push when the user says something like "commit and push" or "please commit this".
+
 ## Key quirks
 
 - Rate limiting: a single shared `tvdb_rate_limiter` (1 call/sec) in `rate_limiter.py` wraps every TVDB API call.
