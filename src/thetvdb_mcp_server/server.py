@@ -22,6 +22,9 @@ from thetvdb_mcp_server.tools import (
     tvdb_get_artwork_extended,
     tvdb_get_episode,
     tvdb_get_episode_extended,
+    tvdb_get_movie,
+    tvdb_get_movie_by_slug,
+    tvdb_get_movie_extended,
     tvdb_get_person,
     tvdb_get_person_extended,
     tvdb_get_season,
@@ -51,7 +54,10 @@ def main() -> None:
     logger = make_logger(config.logging.level)
     init_tools(config)
 
-    # Register all 13 tools
+    # Register all 16 tools
+    mcp.tool(name="tvdb_get_movie")(tvdb_get_movie)
+    mcp.tool(name="tvdb_get_movie_extended")(tvdb_get_movie_extended)
+    mcp.tool(name="tvdb_get_movie_by_slug")(tvdb_get_movie_by_slug)
     mcp.tool(name="tvdb_get_series")(tvdb_get_series)
     mcp.tool(name="tvdb_get_series_extended")(tvdb_get_series_extended)
     mcp.tool(name="tvdb_get_series_by_slug")(tvdb_get_series_by_slug)

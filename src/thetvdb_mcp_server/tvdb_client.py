@@ -86,11 +86,13 @@ class TvdbClient:
             )
 
             overview_found = False
-            for o in translations.get("overviewTranslations", []):
-                if o.get("language") == self._result_language:
-                    record["overview"] = o["overview"]
-                    overview_found = True
-                    break
+            overview_list = translations.get("overviewTranslations")
+            if overview_list is not None:
+                for o in overview_list:
+                    if o.get("language") == self._result_language:
+                        record["overview"] = o["overview"]
+                        overview_found = True
+                        break
             _logger.debug(
                 "Extended format (nested): overview translation %s found for %s",
                 "successfully" if overview_found else "not",
@@ -152,6 +154,53 @@ class TvdbClient:
             record.pop("overviews", None)
 
         return record
+
+    # ------------------------------------------------------------------
+    # Movie endpoints
+    # ------------------------------------------------------------------
+
+    async def get_movie(self, movie_id: int) -> dict:
+        """Fetch a movie base record by ID."""
+        async with self._rate_limiter:
+            result = self._tvdb.get_movie(movie_id)
+        return self._translate_and_strip(result)
+
+    async def get_movie_extended(
+        self,
+        movie_id: int,
+        include_characters: bool = False,
+        include_artworks: bool = False,
+        include_trailers: bool = False,
+    ) -> dict:
+        """Fetch a movie extended record with optional arrays.
+
+        The TVDB API only supports an all-or-nothing ``short`` parameter.
+        To provide granular control, this method calls the API with
+        ``short=True`` when all ``include_*`` parameters are ``False``,
+        and with ``short=False`` otherwise, stripping any unrequested
+        arrays from the response.
+        """
+        short = not (include_characters or include_artworks or include_trailers)
+        meta = "translations" if self._result_language is not None else None
+        async with self._rate_limiter:
+            result = self._tvdb.get_movie_extended(movie_id, short=short, meta=meta)
+
+        if short:
+            return self._translate_and_strip(result)
+
+        if not include_characters:
+            result.pop("characters", None)
+        if not include_artworks:
+            result.pop("artworks", None)
+        if not include_trailers:
+            result.pop("trailers", None)
+        return self._translate_and_strip(result)
+
+    async def get_movie_by_slug(self, slug: str) -> dict:
+        """Fetch a movie record by its slug."""
+        async with self._rate_limiter:
+            result = self._tvdb.get_movie_by_slug(slug)
+        return self._translate_and_strip(result)
 
     # ------------------------------------------------------------------
     # Series endpoints

@@ -11,6 +11,9 @@ from thetvdb_mcp_server.tools import (
     tvdb_get_artwork_extended,
     tvdb_get_episode,
     tvdb_get_episode_extended,
+    tvdb_get_movie,
+    tvdb_get_movie_by_slug,
+    tvdb_get_movie_extended,
     tvdb_get_person,
     tvdb_get_person_extended,
     tvdb_get_season,
@@ -26,6 +29,17 @@ from thetvdb_mcp_server.tools import (
 def make_mock_client():
     """Return a mock TvdbClient with all methods as AsyncMocks."""
     mock = MagicMock()
+    mock.get_movie = AsyncMock(return_value={"id": 1, "name": "Test Movie"})
+    mock.get_movie_extended = AsyncMock(
+        return_value={
+            "id": 1,
+            "name": "Test Movie",
+            "characters": [{"id": 10}],
+            "artworks": [{"id": 20}],
+            "trailers": [{"id": 30}],
+        }
+    )
+    mock.get_movie_by_slug = AsyncMock(return_value={"id": 1, "name": "Test Movie"})
     mock.get_series = AsyncMock(return_value={"id": 1, "name": "Test Series"})
     mock.get_series_extended = AsyncMock(
         return_value={
@@ -74,6 +88,109 @@ def patched_tools(mock_client):
     """Patch tools module to use mock client."""
     with patch("thetvdb_mcp_server.tools._client", mock_client):
         yield mock_client
+
+
+# ======================================================================
+# tvdb_get_movie
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_movie(patched_tools) -> None:
+    """tvdb_get_movie calls client.get_movie and returns result."""
+    result = await tvdb_get_movie(1000)
+
+    patched_tools.get_movie.assert_called_once_with(1000)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# tvdb_get_movie_extended
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_defaults(patched_tools) -> None:
+    """tvdb_get_movie_extended uses default include_ params (all False)."""
+    await tvdb_get_movie_extended(1000)
+
+    patched_tools.get_movie_extended.assert_called_once_with(
+        1000,
+        include_characters=False,
+        include_artworks=False,
+        include_trailers=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_characters_only(patched_tools) -> None:
+    """tvdb_get_movie_extended passes include_characters=True."""
+    await tvdb_get_movie_extended(1000, include_characters=True)
+
+    patched_tools.get_movie_extended.assert_called_once_with(
+        1000,
+        include_characters=True,
+        include_artworks=False,
+        include_trailers=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_artworks_only(patched_tools) -> None:
+    """tvdb_get_movie_extended passes include_artworks=True."""
+    await tvdb_get_movie_extended(1000, include_artworks=True)
+
+    patched_tools.get_movie_extended.assert_called_once_with(
+        1000,
+        include_characters=False,
+        include_artworks=True,
+        include_trailers=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_trailers_only(patched_tools) -> None:
+    """tvdb_get_movie_extended passes include_trailers=True."""
+    await tvdb_get_movie_extended(1000, include_trailers=True)
+
+    patched_tools.get_movie_extended.assert_called_once_with(
+        1000,
+        include_characters=False,
+        include_artworks=False,
+        include_trailers=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_all(patched_tools) -> None:
+    """tvdb_get_movie_extended passes all include_ params as True."""
+    await tvdb_get_movie_extended(
+        1000,
+        include_characters=True,
+        include_artworks=True,
+        include_trailers=True,
+    )
+
+    patched_tools.get_movie_extended.assert_called_once_with(
+        1000,
+        include_characters=True,
+        include_artworks=True,
+        include_trailers=True,
+    )
+
+
+# ======================================================================
+# tvdb_get_movie_by_slug
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_movie_by_slug(patched_tools) -> None:
+    """tvdb_get_movie_by_slug calls client with slug."""
+    result = await tvdb_get_movie_by_slug("the-lord-of-the-rings")
+
+    patched_tools.get_movie_by_slug.assert_called_once_with("the-lord-of-the-rings")
+    assert result["id"] == 1
 
 
 # ======================================================================
@@ -470,3 +587,32 @@ async def test_get_person_extended_raises_without_init() -> None:
     with patch("thetvdb_mcp_server.tools._client", None):
         with pytest.raises(RuntimeError, match="init_tools"):
             await tvdb_get_person_extended(22222)
+
+
+# ======================================================================
+# Error paths — movie tools without init
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_movie_raises_without_init() -> None:
+    """tvdb_get_movie raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_movie(1000)
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_raises_without_init() -> None:
+    """tvdb_get_movie_extended raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_movie_extended(1000)
+
+
+@pytest.mark.asyncio
+async def test_get_movie_by_slug_raises_without_init() -> None:
+    """tvdb_get_movie_by_slug raises RuntimeError if init_tools() not called."""
+    with patch("thetvdb_mcp_server.tools._client", None):
+        with pytest.raises(RuntimeError, match="init_tools"):
+            await tvdb_get_movie_by_slug("test")

@@ -11,6 +11,17 @@ from thetvdb_mcp_server.tvdb_client import TvdbClient
 def make_mock_tvdb():
     """Return a mock TVDB instance with all methods mocked."""
     mock_tvdb = MagicMock()
+    mock_tvdb.get_movie = MagicMock(return_value={"id": 1, "name": "Test Movie"})
+    mock_tvdb.get_movie_extended = MagicMock(
+        return_value={
+            "id": 1,
+            "name": "Test Movie",
+            "characters": [{"id": 10, "name": "Character 1"}],
+            "artworks": [{"id": 20, "name": "Poster 1"}],
+            "trailers": [{"id": 30, "name": "Trailer 1"}],
+        }
+    )
+    mock_tvdb.get_movie_by_slug = MagicMock(return_value={"id": 1, "name": "Test Movie"})
     mock_tvdb.get_series = MagicMock(return_value={"id": 1, "name": "Test Series"})
     mock_tvdb.get_series_extended = MagicMock(
         return_value={
@@ -350,3 +361,143 @@ async def test_search_defaults(client, mock_tvdb) -> None:
     assert kwargs["year"] is None
     assert kwargs["offset"] == 0
     assert kwargs["limit"] == 10
+
+
+# ======================================================================
+# get_movie
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_movie_calls_tvdb_get_movie(client, mock_tvdb) -> None:
+    """get_movie forwards the call to the TVDB client."""
+    result = await client.get_movie(1000)
+
+    mock_tvdb.get_movie.assert_called_once_with(1000)
+    assert result["id"] == 1
+
+
+# ======================================================================
+# get_movie_extended
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_all_false_uses_short(client, mock_tvdb) -> None:
+    """When all include_ params are False, API is called with short=True."""
+    mock_tvdb.get_movie_extended.reset_mock()
+    mock_tvdb.get_movie_extended.return_value = {"id": 1, "name": "Short"}
+
+    await client.get_movie_extended(
+        1000,
+        include_characters=False,
+        include_artworks=False,
+        include_trailers=False,
+    )
+
+    mock_tvdb.get_movie_extended.assert_called_once_with(1000, short=True, meta=None)
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_characters_only(client, mock_tvdb) -> None:
+    """When only include_characters=True, artworks and trailers are stripped."""
+    mock_tvdb.get_movie_extended.reset_mock()
+    mock_tvdb.get_movie_extended.return_value = {
+        "id": 1,
+        "name": "Extended",
+        "characters": [{"id": 10}],
+        "artworks": [{"id": 20}],
+        "trailers": [{"id": 30}],
+    }
+
+    result = await client.get_movie_extended(
+        1000, include_characters=True, include_artworks=False, include_trailers=False
+    )
+
+    mock_tvdb.get_movie_extended.assert_called_once_with(1000, short=False, meta=None)
+    assert "characters" in result
+    assert "artworks" not in result
+    assert "trailers" not in result
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_artworks_only(client, mock_tvdb) -> None:
+    """When only include_artworks=True, characters and trailers are stripped."""
+    mock_tvdb.get_movie_extended.reset_mock()
+    mock_tvdb.get_movie_extended.return_value = {
+        "id": 1,
+        "name": "Extended",
+        "characters": [{"id": 10}],
+        "artworks": [{"id": 20}],
+        "trailers": [{"id": 30}],
+    }
+
+    result = await client.get_movie_extended(
+        1000, include_characters=False, include_artworks=True, include_trailers=False
+    )
+
+    mock_tvdb.get_movie_extended.assert_called_once_with(1000, short=False, meta=None)
+    assert "characters" not in result
+    assert "artworks" in result
+    assert "trailers" not in result
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_trailers_only(client, mock_tvdb) -> None:
+    """When only include_trailers=True, characters and artworks are stripped."""
+    mock_tvdb.get_movie_extended.reset_mock()
+    mock_tvdb.get_movie_extended.return_value = {
+        "id": 1,
+        "name": "Extended",
+        "characters": [{"id": 10}],
+        "artworks": [{"id": 20}],
+        "trailers": [{"id": 30}],
+    }
+
+    result = await client.get_movie_extended(
+        1000, include_characters=False, include_artworks=False, include_trailers=True
+    )
+
+    mock_tvdb.get_movie_extended.assert_called_once_with(1000, short=False, meta=None)
+    assert "characters" not in result
+    assert "artworks" not in result
+    assert "trailers" in result
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_all_true(client, mock_tvdb) -> None:
+    """When all include_ params are True, all arrays are included."""
+    mock_tvdb.get_movie_extended.reset_mock()
+    mock_tvdb.get_movie_extended.return_value = {
+        "id": 1,
+        "name": "Extended",
+        "characters": [{"id": 10}],
+        "artworks": [{"id": 20}],
+        "trailers": [{"id": 30}],
+    }
+
+    result = await client.get_movie_extended(
+        1000,
+        include_characters=True,
+        include_artworks=True,
+        include_trailers=True,
+    )
+
+    mock_tvdb.get_movie_extended.assert_called_once_with(1000, short=False, meta=None)
+    assert "characters" in result
+    assert "artworks" in result
+    assert "trailers" in result
+
+
+# ======================================================================
+# get_movie_by_slug
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_movie_by_slug(client, mock_tvdb) -> None:
+    """get_movie_by_slug forwards the slug to TVDB."""
+    result = await client.get_movie_by_slug("the-lord-of-the-rings")
+
+    mock_tvdb.get_movie_by_slug.assert_called_once_with("the-lord-of-the-rings")
+    assert result["id"] == 1

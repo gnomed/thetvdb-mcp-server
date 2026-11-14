@@ -156,6 +156,9 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
   </role>
   <tools>
     <tool name="tvdb_search">Search TVDB for series, movies, people, and companies by title, alias, or translation. Returns up to 10 results by default.</tool>
+    <tool name="tvdb_get_movie">Fetch a movie base record by its numeric TVDB ID.</tool>
+    <tool name="tvdb_get_movie_extended">Fetch a movie extended record with optional characters, artworks, and trailers arrays.</tool>
+    <tool name="tvdb_get_movie_by_slug">Fetch a movie record by its slug.</tool>
     <tool name="tvdb_get_series">Fetch a series base record by its numeric TVDB ID.</tool>
     <tool name="tvdb_get_series_extended">Fetch a series extended record with optional characters and artworks arrays.</tool>
     <tool name="tvdb_get_series_episodes">Fetch all episodes for a series by season ordering type.</tool>
@@ -185,6 +188,9 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
 | Tool | Description |
 |---|---|
 | `tvdb_search` | Search TVDB for series, movies, people, and companies. Returns up to 10 results by default. |
+| `tvdb_get_movie` | Fetch a movie base record by its numeric TVDB ID. |
+| `tvdb_get_movie_extended` | Fetch a movie extended record with optional characters, artworks, and trailers arrays. |
+| `tvdb_get_movie_by_slug` | Fetch a movie record by its slug (e.g. "the-lord-of-the-rings-the-fellowship-of-the-ring"). |
 | `tvdb_get_series` | Fetch a series base record by its numeric TVDB ID. |
 | `tvdb_get_series_extended` | Fetch a series extended record with optional characters and artworks arrays. |
 | `tvdb_get_series_episodes` | Fetch all episodes for a series. Returns ALL episodes; filter client-side. |

@@ -24,8 +24,8 @@ import sys
 # Add project src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../src"))
 
-from thetvdb_mcp_server.tvdb_client import TvdbClient
 from thetvdb_mcp_server.rate_limiter import tvdb_rate_limiter
+from thetvdb_mcp_server.tvdb_client import TvdbClient
 
 errors = []
 
@@ -107,6 +107,36 @@ async def run_tests():
         print(f"  OK ({len(results)} results)")
     except Exception as e:
         errors.append(f"search: {e}")
+        print(f"  FAILED: {e}")
+
+    # Test get_movie
+    print("Testing get_movie (ID: 125759)...")
+    try:
+        result = await client.get_movie(125759)
+        check_record(result, "get_movie")
+        print(f"  OK (name: {result.get('name', 'N/A')})")
+    except Exception as e:
+        errors.append(f"get_movie: {e}")
+        print(f"  FAILED: {e}")
+
+    # Test get_movie_extended
+    print("Testing get_movie_extended (ID: 125759)...")
+    try:
+        result = await client.get_movie_extended(125759)
+        check_record(result, "get_movie_extended")
+        print(f"  OK (name: {result.get('name', 'N/A')})")
+    except Exception as e:
+        errors.append(f"get_movie_extended: {e}")
+        print(f"  FAILED: {e}")
+
+    # Test get_movie_by_slug
+    print("Testing get_movie_by_slug (slug: the-matrix)...")
+    try:
+        result = await client.get_movie_by_slug("the-matrix")
+        check_record(result, "get_movie_by_slug")
+        print(f"  OK (name: {result.get('name', 'N/A')})")
+    except Exception as e:
+        errors.append(f"get_movie_by_slug: {e}")
         print(f"  FAILED: {e}")
 
     # Find an episode ID for episode tests

@@ -34,6 +34,76 @@ def init_tools(config: AppConfig) -> None:
 
 
 # ======================================================================
+# Movie tools
+# ======================================================================
+
+
+async def tvdb_get_movie(movie_id: int) -> dict[str, Any]:
+    """Fetch a movie base record by its numeric TVDB ID.
+
+    Args:
+        movie_id: Numeric TVDB movie ID.
+
+    Returns:
+        Unfiltered movie base record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_movie(movie_id)
+
+
+async def tvdb_get_movie_extended(
+    movie_id: int,
+    include_characters: bool = False,
+    include_artworks: bool = False,
+    include_trailers: bool = False,
+) -> dict[str, Any]:
+    """Fetch a movie extended record with optional characters, artworks, and trailers.
+
+    The `characters`, `artworks`, and `trailers` arrays are only included
+    when the respective `include_*` parameter is True.
+
+    TIP: Leave include_* parameters as False unless you specifically need
+    that data. Including them significantly increases the response size.
+    If you only need basic movie info, use tvdb_get_movie instead.
+
+    Args:
+        movie_id: Numeric TVDB movie ID.
+        include_characters: When True, includes the `characters` array.
+            Leave False unless you specifically need character information.
+        include_artworks: When True, includes the `artworks` array.
+            Leave False unless you specifically need artwork information.
+        include_trailers: When True, includes the `trailers` array.
+            Leave False unless you specifically need trailer information.
+
+    Returns:
+        Movie extended record with requested arrays.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_movie_extended(
+        movie_id,
+        include_characters=include_characters,
+        include_artworks=include_artworks,
+        include_trailers=include_trailers,
+    )
+
+
+async def tvdb_get_movie_by_slug(slug: str) -> dict[str, Any]:
+    """Fetch a movie record by its slug.
+
+    Args:
+        slug: Movie slug, e.g. "the-lord-of-the-rings-the-fellowship-of-the-ring".
+
+    Returns:
+        Unfiltered movie record.
+    """
+    if _client is None:
+        raise RuntimeError("init_tools() must be called before using TVDB tools")
+    return await _client.get_movie_by_slug(slug)
+
+
+# ======================================================================
 # Search and episodes tools
 # ======================================================================
 
