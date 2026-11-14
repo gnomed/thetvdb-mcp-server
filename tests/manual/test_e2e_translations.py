@@ -51,7 +51,7 @@ async def run_tests():
     # Use "eng" as result_language to test translation stripping
     client = TvdbClient(api_key, None, tvdb_rate_limiter, result_language="eng")
 
-    print(f"Testing TVDB API integration with result_language='eng'")
+    print("Testing TVDB API integration with result_language='eng'")
     print(f"API key: {api_key[:4]}...{api_key[-4:]}")
     print()
 
@@ -139,12 +139,13 @@ async def run_tests():
         errors.append(f"get_movie_by_slug: {e}")
         print(f"  FAILED: {e}")
 
-    # Find an episode ID for episode tests
-    print("Searching for episode ID...")
+    # Find an episode ID for episode tests (get from series episodes list)
+    print("Finding episode ID from series episodes...")
     try:
-        ep_search = await client.search("The Witcher S01E01", type_="episode", limit=1)
-        if ep_search:
-            ep_id = ep_search[0]["id"]
+        episodes_result = await client.get_series_episodes(362696)
+        episodes = episodes_result.get("episodes", [])
+        if episodes:
+            ep_id = episodes[0]["id"]
             print(f"  Found episode ID: {ep_id}")
 
             # Test get_episode

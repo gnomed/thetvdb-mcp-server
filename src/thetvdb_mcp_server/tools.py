@@ -57,11 +57,17 @@ async def tvdb_get_movie_extended(
     include_characters: bool = False,
     include_artworks: bool = False,
     include_trailers: bool = False,
+    include_lists: str = "none",
+    include_tags: bool = False,
+    include_content_ratings: bool = False,
+    include_remote_ids: bool = True,
+    include_companies: bool = True,
 ) -> dict[str, Any]:
     """Fetch a movie extended record with optional characters, artworks, and trailers.
 
-    The `characters`, `artworks`, and `trailers` arrays are only included
-    when the respective `include_*` parameter is True.
+    The `characters`, `artworks`, `trailers`, `lists`, `tags`, `contentRatings`,
+    `remoteIds`, and `companies` arrays are only included when the respective
+    `include_*` parameter is True (or set to a non-"none" value).
 
     TIP: Leave include_* parameters as False unless you specifically need
     that data. Including them significantly increases the response size.
@@ -75,6 +81,16 @@ async def tvdb_get_movie_extended(
             Leave False unless you specifically need artwork information.
         include_trailers: When True, includes the `trailers` array.
             Leave False unless you specifically need trailer information.
+        include_lists: Whether to include the `lists` array. One of:
+            "none" (default), "all", or "official" (only official lists).
+        include_tags: When True, includes the `tags` array.
+            Leave False unless you specifically need tag information.
+        include_content_ratings: When True, includes the `contentRatings` array.
+            Leave False unless you specifically need content rating information.
+        include_remote_ids: When True, includes the `remoteIds` array.
+            Leave True unless you specifically want to exclude remote IDs.
+        include_companies: When True, includes the `companies` map.
+            Leave True unless you specifically want to exclude company information.
 
     Returns:
         Movie extended record with requested arrays.
@@ -86,6 +102,11 @@ async def tvdb_get_movie_extended(
         include_characters=include_characters,
         include_artworks=include_artworks,
         include_trailers=include_trailers,
+        include_lists=include_lists,
+        include_tags=include_tags,
+        include_content_ratings=include_content_ratings,
+        include_remote_ids=include_remote_ids,
+        include_companies=include_companies,
     )
 
 
@@ -228,16 +249,22 @@ async def tvdb_get_series_extended(
     series_id: int,
     include_characters: bool = False,
     include_artworks: bool = False,
+    include_lists: str = "none",
+    include_tags: bool = False,
+    include_content_ratings: bool = False,
+    include_remote_ids: bool = True,
+    include_seasons: str = "all",
+    include_companies: bool = True,
 ) -> dict[str, Any]:
-    """Fetch a series extended record with optional characters and artworks.
+    """Fetch a series extended record with optional arrays.
 
-    The `characters` and `artworks` arrays are only included when the
-    respective `include_*` parameter is True.
+    The `characters`, `artworks`, `lists`, `tags`, `contentRatings`, `remoteIds`,
+    and `companies` arrays are only included when the respective `include_*`
+    parameter is True (or set to a non-"none" value).
 
-    TIP: Leave include_characters and include_artworks as False unless you
-    specifically need that data. Including them significantly increases the
-    response size. If you only need basic series info, use tvdb_get_series
-    instead of this extended version.
+    TIP: Leave include_* parameters as False unless you specifically need
+    that data. Including them significantly increases the response size.
+    If you only need basic series info, use tvdb_get_series instead.
 
     Args:
         series_id: Numeric TVDB series ID.
@@ -245,6 +272,18 @@ async def tvdb_get_series_extended(
             Leave False unless you specifically need character information.
         include_artworks: When True, includes the `artworks` array.
             Leave False unless you specifically need artwork information.
+        include_lists: Whether to include the `lists` array. One of:
+            "none" (default), "all", or "official" (only official lists).
+        include_tags: When True, includes the `tags` array.
+            Leave False unless you specifically need tag information.
+        include_content_ratings: When True, includes the `contentRatings` array.
+            Leave False unless you specifically need content rating information.
+        include_remote_ids: When True, includes the `remoteIds` array.
+            Leave True unless you specifically want to exclude remote IDs.
+        include_seasons: Whether to include the `seasons` array. One of:
+            "none", "all" (default), or a season type string (e.g. "Aired Order").
+        include_companies: When True, includes the `companies` array.
+            Leave True unless you specifically want to exclude company information.
 
     Returns:
         Series extended record with requested arrays.
@@ -255,6 +294,12 @@ async def tvdb_get_series_extended(
         series_id,
         include_characters=include_characters,
         include_artworks=include_artworks,
+        include_lists=include_lists,
+        include_tags=include_tags,
+        include_content_ratings=include_content_ratings,
+        include_remote_ids=include_remote_ids,
+        include_seasons=include_seasons,
+        include_companies=include_companies,
     )
 
 
@@ -363,7 +408,12 @@ async def tvdb_get_episode(episode_id: int) -> dict[str, Any]:
     return await _client.get_episode(episode_id)
 
 
-async def tvdb_get_episode_extended(episode_id: int) -> dict[str, Any]:
+async def tvdb_get_episode_extended(
+    episode_id: int,
+    include_awards: bool = True,
+    include_characters: bool = True,
+    include_companies: bool = True,
+) -> dict[str, Any]:
     """Fetch an episode extended record by its numeric TVDB ID.
 
     TIP: Only use this extended version if you need additional episode
@@ -371,13 +421,24 @@ async def tvdb_get_episode_extended(episode_id: int) -> dict[str, Any]:
 
     Args:
         episode_id: Numeric TVDB episode ID.
+        include_awards: When True, includes the `awards` array.
+            Leave True unless you specifically want to exclude awards.
+        include_characters: When True, includes the `characters` array.
+            Leave True unless you specifically want to exclude characters.
+        include_companies: When True, includes the `companies` array.
+            Leave True unless you specifically want to exclude companies.
 
     Returns:
         Unfiltered episode extended record.
     """
     if _client is None:
         raise RuntimeError("init_tools() must be called before using TVDB tools")
-    return await _client.get_episode_extended(episode_id)
+    return await _client.get_episode_extended(
+        episode_id,
+        include_awards=include_awards,
+        include_characters=include_characters,
+        include_companies=include_companies,
+    )
 
 
 # ======================================================================
@@ -403,7 +464,12 @@ async def tvdb_get_person(person_id: int) -> dict[str, Any]:
     return await _client.get_person(person_id)
 
 
-async def tvdb_get_person_extended(person_id: int) -> dict[str, Any]:
+async def tvdb_get_person_extended(
+    person_id: int,
+    include_awards: bool = True,
+    include_characters: bool = True,
+    include_biographies: bool = True,
+) -> dict[str, Any]:
     """Fetch a person extended record by their numeric TVDB ID.
 
     NOTE: The person_id must be a pure numeric ID (e.g. 327579), not the
@@ -415,10 +481,21 @@ async def tvdb_get_person_extended(person_id: int) -> dict[str, Any]:
 
     Args:
         person_id: Numeric TVDB person ID (e.g. 327579, not "person-327579").
+        include_awards: When True, includes the `awards` array.
+            Leave True unless you specifically want to exclude awards.
+        include_characters: When True, includes the `characters` array.
+            Leave True unless you specifically want to exclude characters.
+        include_biographies: When True, includes the `biographies` array.
+            Leave True unless you specifically want to exclude biographies.
 
     Returns:
         Unfiltered person extended record.
     """
     if _client is None:
         raise RuntimeError("init_tools() must be called before using TVDB tools")
-    return await _client.get_person_extended(person_id)
+    return await _client.get_person_extended(
+        person_id,
+        include_awards=include_awards,
+        include_characters=include_characters,
+        include_biographies=include_biographies,
+    )

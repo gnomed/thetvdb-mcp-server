@@ -119,6 +119,11 @@ async def test_get_movie_extended_defaults(patched_tools) -> None:
         include_characters=False,
         include_artworks=False,
         include_trailers=False,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_companies=True,
     )
 
 
@@ -132,6 +137,11 @@ async def test_get_movie_extended_characters_only(patched_tools) -> None:
         include_characters=True,
         include_artworks=False,
         include_trailers=False,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_companies=True,
     )
 
 
@@ -145,6 +155,11 @@ async def test_get_movie_extended_artworks_only(patched_tools) -> None:
         include_characters=False,
         include_artworks=True,
         include_trailers=False,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_companies=True,
     )
 
 
@@ -158,6 +173,11 @@ async def test_get_movie_extended_trailers_only(patched_tools) -> None:
         include_characters=False,
         include_artworks=False,
         include_trailers=True,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_companies=True,
     )
 
 
@@ -176,6 +196,11 @@ async def test_get_movie_extended_all(patched_tools) -> None:
         include_characters=True,
         include_artworks=True,
         include_trailers=True,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_companies=True,
     )
 
 
@@ -295,6 +320,12 @@ async def test_get_series_extended_defaults(patched_tools) -> None:
         78804,
         include_characters=False,
         include_artworks=False,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_seasons="all",
+        include_companies=True,
     )
 
 
@@ -307,6 +338,12 @@ async def test_get_series_extended_characters_only(patched_tools) -> None:
         78804,
         include_characters=True,
         include_artworks=False,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_seasons="all",
+        include_companies=True,
     )
 
 
@@ -319,6 +356,12 @@ async def test_get_series_extended_artworks_only(patched_tools) -> None:
         78804,
         include_characters=False,
         include_artworks=True,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_seasons="all",
+        include_companies=True,
     )
 
 
@@ -331,6 +374,12 @@ async def test_get_series_extended_both(patched_tools) -> None:
         78804,
         include_characters=True,
         include_artworks=True,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_seasons="all",
+        include_companies=True,
     )
 
 
@@ -428,7 +477,12 @@ async def test_get_episode_extended(patched_tools) -> None:
     """tvdb_get_episode_extended calls client.get_episode_extended."""
     result = await tvdb_get_episode_extended(11111)
 
-    patched_tools.get_episode_extended.assert_called_once_with(11111)
+    patched_tools.get_episode_extended.assert_called_once_with(
+        11111,
+        include_awards=True,
+        include_characters=True,
+        include_companies=True,
+    )
     assert result["id"] == 1
 
 
@@ -456,7 +510,12 @@ async def test_get_person_extended(patched_tools) -> None:
     """tvdb_get_person_extended calls client.get_person_extended."""
     result = await tvdb_get_person_extended(22222)
 
-    patched_tools.get_person_extended.assert_called_once_with(22222)
+    patched_tools.get_person_extended.assert_called_once_with(
+        22222,
+        include_awards=True,
+        include_characters=True,
+        include_biographies=True,
+    )
     assert result["id"] == 1
 
 
