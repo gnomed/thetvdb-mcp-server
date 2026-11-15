@@ -266,6 +266,21 @@ class TvdbClient:
                                                     for a in comp_aliases
                                                     if a.get("language") == self._result_language
                                                 ]
+                    # Handle episodes nested in seasons
+                    season_episodes = season.get("episodes")
+                    if isinstance(season_episodes, list):
+                        for episode in season_episodes:
+                            if isinstance(episode, dict):
+                                episode.pop("nameTranslations", None)
+                                episode.pop("overviewTranslations", None)
+
+        # Handle episodes at top level (get_season_extended)
+        episodes = record.get("episodes")
+        if isinstance(episodes, list):
+            for episode in episodes:
+                if isinstance(episode, dict):
+                    episode.pop("nameTranslations", None)
+                    episode.pop("overviewTranslations", None)
 
         return record
 
