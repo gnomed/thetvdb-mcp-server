@@ -136,15 +136,6 @@ async def run_tests() -> int:
         "series_reacher_options_off",
         tools.tvdb_get_series,
         reacher_series_id,
-        include_characters=False,
-        include_artworks=False,
-        include_trailers=False,
-        include_lists="none",
-        include_tags=False,
-        include_content_ratings=False,
-        include_remote_ids=False,
-        include_seasons="none",
-        include_companies=False,
     )
 
     await run_tool(
@@ -196,11 +187,6 @@ async def run_tests() -> int:
             "season_reacher_options_off",
             tools.tvdb_get_season,
             reacher_season_id,
-            include_artworks=False,
-            include_companies=False,
-            include_episodes=False,
-            include_trailers=False,
-            include_tags=False,
         )
         await run_tool(
             "season_reacher_options_on",
@@ -227,14 +213,6 @@ async def run_tests() -> int:
             "episode_reacher_options_off",
             tools.tvdb_get_episode,
             reacher_episode_id,
-            include_awards=False,
-            include_characters=False,
-            include_companies=False,
-            include_seasons=False,
-            include_content_ratings=False,
-            include_remote_ids=False,
-            include_tags=False,
-            include_trailers=False,
         )
         await run_tool(
             "episode_reacher_options_on",
@@ -266,11 +244,6 @@ async def run_tests() -> int:
             "person_reacher_options_off",
             tools.tvdb_get_person,
             reacher_person_id,
-            include_awards=False,
-            include_characters=False,
-            include_biographies=False,
-            include_remote_ids=False,
-            include_tags=False,
         )
         await run_tool(
             "person_reacher_options_on",
@@ -289,16 +262,6 @@ async def run_tests() -> int:
         "movie_matrix_options_off",
         tools.tvdb_get_movie,
         matrix_movie_id,
-        include_characters=False,
-        include_artworks=False,
-        include_trailers=False,
-        include_lists="none",
-        include_tags=False,
-        include_content_ratings=False,
-        include_remote_ids=False,
-        include_companies=False,
-        include_awards=False,
-        include_releases=False,
     )
     await run_tool(
         "movie_matrix_options_on",

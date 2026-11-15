@@ -47,6 +47,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 htmlcov/
+tmp_test_output/
 
 # Type checking
 .mypy_cache/

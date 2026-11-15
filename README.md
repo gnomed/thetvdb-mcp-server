@@ -168,7 +168,7 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
   </tools>
   <guidelines>
     <item>Use tvdb_search to find a TVDB ID before calling other tools that require one.</item>
-    <item>Use tvdb_get_series with include_characters or include_artworks only when the user needs that data, as those arrays can be large.</item>
+    <item>Each get tool has include_* options that default to false — omit them to keep responses small, and only set them to true if you need the additional data.</item>
     <item>Use tvdb_get_series_episodes to retrieve episode lists; specify season_type (e.g. "default", "aired", "dvd") as needed.</item>
     <item>If you only have a series title and not an ID, search first — never guess IDs.</item>
   </guidelines>
@@ -182,15 +182,15 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
 | Tool | Description |
 |---|---|
 | `tvdb_search` | Search TVDB for series, movies, people, and companies. Returns up to 10 results by default. |
-| `tvdb_get_movie` | Fetch a movie record with optional characters, artworks, trailers, awards, lists, tags, contentRatings, remoteIds, and companies. |
+| `tvdb_get_movie` | Fetch a movie record. Optional include_* params (default false): characters, artworks, trailers, lists, tags, contentRatings, remoteIds, companies, awards, releases. |
 | `tvdb_get_movie_by_slug` | Fetch a movie record by its slug (e.g. "the-lord-of-the-rings-the-fellowship-of-the-ring"). |
-| `tvdb_get_series` | Fetch a series record with optional characters, artworks, trailers, lists, tags, contentRatings, remoteIds, seasons, and companies. |
+| `tvdb_get_series` | Fetch a series record. Optional include_* params (default false): characters, artworks, trailers, lists, tags, contentRatings, remoteIds, seasons, companies. |
 | `tvdb_get_series_episodes` | Fetch all episodes for a series. Returns ALL episodes; filter client-side. |
 | `tvdb_get_series_by_slug` | Fetch a series record by its slug (e.g. "doctor-who"). |
-| `tvdb_get_season` | Fetch a season record by its numeric TVDB ID. Optional include_* params for artworks, companies, episodes, trailers, and tags. |
+| `tvdb_get_season` | Fetch a season record by its numeric TVDB ID. Optional include_* params (default false): artworks, companies, episodes, trailers, tags. |
 | `tvdb_get_artwork` | Fetch an artwork record by its numeric TVDB ID. |
-| `tvdb_get_episode` | Fetch an episode record by its numeric TVDB ID. Optional include_* params for awards, characters, companies, seasons, contentRatings, remoteIds, tags, and trailers. |
-| `tvdb_get_person` | Fetch a person record by their numeric TVDB ID. Optional include_* params for awards, characters, biographies, remoteIds, and tags. |
+| `tvdb_get_episode` | Fetch an episode record by its numeric TVDB ID. Optional include_* params (default false): awards, characters, companies, seasons, contentRatings, remoteIds, tags, trailers. |
+| `tvdb_get_person` | Fetch a person record by their numeric TVDB ID. Optional include_* params (default false): awards, characters, biographies, remoteIds, tags. |
 
 ---
 

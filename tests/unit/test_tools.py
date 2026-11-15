@@ -96,10 +96,10 @@ async def test_get_movie_extended_defaults(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_companies=True,
-        include_awards=True,
-        include_releases=True,
+        include_remote_ids=False,
+        include_companies=False,
+        include_awards=False,
+        include_releases=False,
     )
 
 
@@ -116,10 +116,10 @@ async def test_get_movie_extended_characters_only(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_companies=True,
-        include_awards=True,
-        include_releases=True,
+        include_remote_ids=False,
+        include_companies=False,
+        include_awards=False,
+        include_releases=False,
     )
 
 
@@ -136,10 +136,10 @@ async def test_get_movie_extended_artworks_only(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_companies=True,
-        include_awards=True,
-        include_releases=True,
+        include_remote_ids=False,
+        include_companies=False,
+        include_awards=False,
+        include_releases=False,
     )
 
 
@@ -156,10 +156,10 @@ async def test_get_movie_extended_trailers_only(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_companies=True,
-        include_awards=True,
-        include_releases=True,
+        include_remote_ids=False,
+        include_companies=False,
+        include_awards=False,
+        include_releases=False,
     )
 
 
@@ -181,10 +181,10 @@ async def test_get_movie_extended_all(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_companies=True,
-        include_awards=True,
-        include_releases=True,
+        include_remote_ids=False,
+        include_companies=False,
+        include_awards=False,
+        include_releases=False,
     )
 
 
@@ -201,10 +201,10 @@ async def test_get_movie_extended_awards_param(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_companies=True,
+        include_remote_ids=False,
+        include_companies=False,
         include_awards=False,
-        include_releases=True,
+        include_releases=False,
     )
 
 
@@ -221,9 +221,9 @@ async def test_get_movie_extended_releases_param(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_companies=True,
-        include_awards=True,
+        include_remote_ids=False,
+        include_companies=False,
+        include_awards=False,
         include_releases=False,
     )
 
@@ -333,9 +333,9 @@ async def test_get_series_extended_defaults(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_seasons="all",
-        include_companies=True,
+        include_remote_ids=False,
+        include_seasons="none",
+        include_companies=False,
         include_trailers=False,
     )
 
@@ -352,9 +352,9 @@ async def test_get_series_extended_characters_only(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_seasons="all",
-        include_companies=True,
+        include_remote_ids=False,
+        include_seasons="none",
+        include_companies=False,
         include_trailers=False,
     )
 
@@ -371,9 +371,9 @@ async def test_get_series_extended_artworks_only(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_seasons="all",
-        include_companies=True,
+        include_remote_ids=False,
+        include_seasons="none",
+        include_companies=False,
         include_trailers=False,
     )
 
@@ -390,9 +390,9 @@ async def test_get_series_extended_both(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_seasons="all",
-        include_companies=True,
+        include_remote_ids=False,
+        include_seasons="none",
+        include_companies=False,
         include_trailers=False,
     )
 
@@ -409,9 +409,9 @@ async def test_get_series_extended_trailers_param(patched_tools) -> None:
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_seasons="all",
-        include_companies=True,
+        include_remote_ids=False,
+        include_seasons="none",
+        include_companies=False,
         include_trailers=True,
     )
 
@@ -443,10 +443,10 @@ async def test_get_season_extended(patched_tools) -> None:
     patched_tools.get_season_extended.assert_called_once_with(
         12345,
         include_artworks=False,
-        include_companies=True,
-        include_episodes=True,
+        include_companies=False,
+        include_episodes=False,
         include_trailers=False,
-        include_tags=True,
+        include_tags=False,
     )
     assert result["id"] == 1
 
@@ -499,13 +499,13 @@ async def test_get_episode_extended(patched_tools) -> None:
 
     patched_tools.get_episode_extended.assert_called_once_with(
         11111,
-        include_awards=True,
-        include_characters=True,
-        include_companies=True,
-        include_seasons=True,
+        include_awards=False,
+        include_characters=False,
+        include_companies=False,
+        include_seasons=False,
         include_content_ratings=False,
-        include_remote_ids=True,
-        include_tags=True,
+        include_remote_ids=False,
+        include_tags=False,
         include_trailers=False,
     )
     assert result["id"] == 1
@@ -551,11 +551,11 @@ async def test_get_person_extended(patched_tools) -> None:
 
     patched_tools.get_person_extended.assert_called_once_with(
         22222,
-        include_awards=True,
-        include_characters=True,
-        include_biographies=True,
-        include_remote_ids=True,
-        include_tags=True,
+        include_awards=False,
+        include_characters=False,
+        include_biographies=False,
+        include_remote_ids=False,
+        include_tags=False,
     )
     assert result["id"] == 1
 

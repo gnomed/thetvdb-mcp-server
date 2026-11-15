@@ -1,27 +1,31 @@
-"""TVDB API client wrapper using the official tvdb_v4_official package."""
+"""TVDB API client wrapper using the official tvdb_v4_official package.
 
+Includes an in-memory TTL cache for API responses. All extended methods
+always request the full API response (short=False) and cache it, so that
+subsequent calls with different include_* parameters can be served from
+the cache without additional API requests.
+"""
+
+import copy
 import logging
 from typing import Any
 
 import tvdb_v4_official
 
+from thetvdb_mcp_server.cache import tvdb_cache
 from thetvdb_mcp_server.rate_limiter import AsyncRateLimiter
 
 _logger = logging.getLogger(__name__)
 
 
 class TvdbClient:
-    """Wrapper around the official TVDB v4 Python client.
-
-    Handles rate limiting and provides a simplified interface for the
-    operations this MCP server needs.
+    """Wrapper around the official TVDB v4 Python client with caching.
 
     Args:
         api_key: TVDB API key obtained from the TVDB developer portal.
-        pin: Optional subscriber PIN for extended access. Pass ``None``
-            if not applicable.
-        rate_limiter: Shared rate limiter instance used to throttle all
-            outbound calls.
+        pin: Optional subscriber PIN for extended access.
+        rate_limiter: Shared rate limiter instance.
+        result_language: Optional 3-character ISO 639-2 language code.
     """
 
     def __init__(
@@ -35,11 +39,12 @@ class TvdbClient:
         self._rate_limiter = rate_limiter
         self._result_language = result_language
 
-    def _translate_and_strip(self, data: Any) -> Any:
-        """Recursively walk the JSON tree, translating/normalizing every record.
+    # ------------------------------------------------------------------
+    # Translation and filtering helpers
+    # ------------------------------------------------------------------
 
-        If result_language is not set, only normalizes field names.
-        """
+    def _translate_and_strip(self, data: Any) -> Any:
+        """Recursively walk the JSON tree, translating/normalizing every record."""
         if isinstance(data, dict):
             self._normalize_and_translate_record(data)
             for key in data:
@@ -51,24 +56,19 @@ class TvdbClient:
 
     def _normalize_and_translate_record(self, record: dict) -> None:
         """Normalize field names and apply translation to a single record dict."""
-        # --- Normalization (always applied) ---
-
-        # tagOptions -> tags (same concept/structure, different key per endpoint)
+        # tagOptions -> tags
         if "tagOptions" in record and "tags" not in record:
             record["tags"] = record.pop("tagOptions")
 
-        # artwork -> artworks (season uses singular, others use plural)
+        # artwork -> artworks (season uses singular)
         if "artwork" in record and "artworks" not in record:
             record["artworks"] = record.pop("artwork")
 
-        # --- Translation (only if result_language is set) ---
         if self._result_language is None:
             return
 
         lang = self._result_language
 
-        # translations: nested {nameTranslations:[...], overviewTranslations:[...]}
-        #               OR flat {eng:"Name", deu:"Name"}
         translations = record.get("translations")
         if isinstance(translations, dict):
             if "nameTranslations" in translations:
@@ -78,18 +78,15 @@ class TvdbClient:
                 record["name"] = translations[lang]
             record.pop("translations", None)
 
-        # overviews: flat {eng:"Overview", deu:"Overview"}
         overviews = record.get("overviews")
         if isinstance(overviews, dict):
             if lang in overviews:
                 record["overview"] = overviews[lang]
             record.pop("overviews", None)
 
-        # Strip language-code-only arrays (lists of available languages, no data)
         record.pop("nameTranslations", None)
         record.pop("overviewTranslations", None)
 
-        # Filter language-specific list fields to result_language
         for field in ("aliases", "trailers"):
             items = record.get(field)
             if isinstance(items, list) and items and isinstance(items[0], dict):
@@ -103,15 +100,7 @@ class TvdbClient:
                 return
 
     def _apply_include_filters(self, data: Any, **filters) -> Any:
-        """Recursively apply include_* filters to nested TVDB response data.
-
-        Works on any JSON structure (dicts, lists, primitives). Boolean filters
-        pop the field when False; string filters handle "none"/"all"/"official"
-        or season type strings. Filters that don't apply to a given level are
-        no-ops (pop with default None).
-
-        Assumes _translate_and_strip has already been called.
-        """
+        """Recursively apply include_* filters to nested TVDB response data."""
         include_tags = filters.get("include_tags", True)
         include_content_ratings = filters.get("include_content_ratings", True)
         include_remote_ids = filters.get("include_remote_ids", True)
@@ -127,7 +116,6 @@ class TvdbClient:
         include_seasons = filters.get("include_seasons", "all")
 
         if isinstance(data, dict):
-            # Boolean filters
             for field, include in [
                 ("tags", include_tags),
                 ("contentRatings", include_content_ratings),
@@ -144,7 +132,6 @@ class TvdbClient:
                 if not include:
                     data.pop(field, None)
 
-            # Lists: "none", "all", or "official"
             if include_lists == "none":
                 data.pop("lists", None)
             elif include_lists == "official":
@@ -152,7 +139,6 @@ class TvdbClient:
                 if isinstance(lists, list):
                     data["lists"] = [item for item in lists if item.get("isOfficial")]
 
-            # Seasons: "none", "all", or season type string
             if include_seasons == "none":
                 data.pop("seasons", None)
             elif include_seasons != "all":
@@ -164,7 +150,6 @@ class TvdbClient:
                         if isinstance(s, dict) and s.get("type", {}).get("name", "").lower() == include_seasons.lower()
                     ]
 
-            # Recurse into remaining fields
             for key in data:
                 data[key] = self._apply_include_filters(data[key], **filters)
 
@@ -176,12 +161,6 @@ class TvdbClient:
     # ------------------------------------------------------------------
     # Movie endpoints
     # ------------------------------------------------------------------
-
-    async def get_movie(self, movie_id: int) -> dict:
-        """Fetch a movie base record by ID."""
-        async with self._rate_limiter:
-            result = self._tvdb.get_movie(movie_id)
-        return self._translate_and_strip(result)
 
     async def get_movie_extended(
         self,
@@ -199,21 +178,44 @@ class TvdbClient:
     ) -> dict:
         """Fetch a movie extended record with optional arrays.
 
-        The TVDB API only supports an all-or-nothing ``short`` parameter.
-        To provide granular control, this method calls the API with
-        ``short=True`` when all ``include_*`` parameters are ``False``,
-        and with ``short=False`` otherwise, stripping any unrequested
-        arrays from the response.
+        Always requests the full API response and caches it. Different
+        include_* parameter combinations for the same movie are served
+        from the same cache entry.
         """
-        short = not (include_characters or include_artworks or include_trailers)
+        cache_key = f"movie:{movie_id}"
         meta = "translations" if self._result_language is not None else None
+
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            result = copy.deepcopy(cached)
+            self._apply_include_filters(
+                result,
+                include_tags=include_tags,
+                include_content_ratings=include_content_ratings,
+                include_remote_ids=include_remote_ids,
+                include_companies=include_companies,
+                include_awards=include_awards,
+                include_characters=include_characters,
+                include_biographies=False,
+                include_artworks=include_artworks,
+                include_trailers=include_trailers,
+                include_episodes=False,
+                include_lists=include_lists,
+                include_seasons="none",
+                include_releases=include_releases,
+            )
+            return result
+
+        # Cache miss — call API
         async with self._rate_limiter:
-            result = self._tvdb.get_movie_extended(movie_id, short=short, meta=meta)
+            result = self._tvdb.get_movie_extended(movie_id, short=False, meta=meta)
 
         result = self._translate_and_strip(result)
+        tvdb_cache.set(cache_key, result)
 
+        # Apply filters and return
         return self._apply_include_filters(
-            result,
+            copy.deepcopy(result),
             include_tags=include_tags,
             include_content_ratings=include_content_ratings,
             include_remote_ids=include_remote_ids,
@@ -231,19 +233,22 @@ class TvdbClient:
 
     async def get_movie_by_slug(self, slug: str) -> dict:
         """Fetch a movie record by its slug."""
+        cache_key = f"movie_slug:{slug}"
+
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
+
         async with self._rate_limiter:
             result = self._tvdb.get_movie_by_slug(slug)
-        return self._translate_and_strip(result)
+
+        result = self._translate_and_strip(result)
+        tvdb_cache.set(cache_key, result)
+        return copy.deepcopy(result)
 
     # ------------------------------------------------------------------
     # Series endpoints
     # ------------------------------------------------------------------
-
-    async def get_series(self, series_id: int) -> dict:
-        """Fetch a series base record by ID."""
-        async with self._rate_limiter:
-            result = self._tvdb.get_series(series_id)
-        return self._translate_and_strip(result)
 
     async def get_series_extended(
         self,
@@ -260,21 +265,42 @@ class TvdbClient:
     ) -> dict:
         """Fetch a series extended record with optional arrays.
 
-        The TVDB API only supports an all-or-nothing ``short`` parameter.
-        To provide granular control, this method calls the API with
-        ``short=True`` when both ``include_characters`` and ``include_artworks``
-        are ``False``, and with ``short=False`` otherwise, stripping any
-        unrequested arrays from the response.
+        Always requests the full API response and caches it. Different
+        include_* parameter combinations for the same series are served
+        from the same cache entry.
         """
-        short = not (include_characters or include_artworks)
+        cache_key = f"series:{series_id}"
         meta = "translations" if self._result_language is not None else None
+
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            result = copy.deepcopy(cached)
+            self._apply_include_filters(
+                result,
+                include_tags=include_tags,
+                include_content_ratings=include_content_ratings,
+                include_remote_ids=include_remote_ids,
+                include_companies=include_companies,
+                include_awards=False,
+                include_characters=include_characters,
+                include_biographies=False,
+                include_artworks=include_artworks,
+                include_trailers=include_trailers,
+                include_episodes=False,
+                include_lists=include_lists,
+                include_seasons=include_seasons,
+            )
+            return result
+
+        # Cache miss — call API
         async with self._rate_limiter:
-            result = self._tvdb.get_series_extended(series_id, short=short, meta=meta)
+            result = self._tvdb.get_series_extended(series_id, short=False, meta=meta)
 
         result = self._translate_and_strip(result)
+        tvdb_cache.set(cache_key, result)
 
         return self._apply_include_filters(
-            result,
+            copy.deepcopy(result),
             include_tags=include_tags,
             include_content_ratings=include_content_ratings,
             include_remote_ids=include_remote_ids,
@@ -296,13 +322,14 @@ class TvdbClient:
         page: int = 0,
         lang: str | None = None,
     ) -> dict:
-        """Fetch episodes for a series by season type.
+        """Fetch episodes for a series by season type."""
+        season_key = season_type or "default"
+        cache_key = f"episodes:{series_id}:{season_key}:{page}:{lang}"
 
-        If season_type is not specified, the TVDB library uses "default".
-        Note: The TVDB Python library does not support filtering by season
-        or episode number. To get a specific season's episodes, filter the
-        results client-side.
-        """
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
+
         params: dict[str, object] = {
             "page": page,
             "lang": lang,
@@ -312,23 +339,28 @@ class TvdbClient:
         async with self._rate_limiter:
             result = self._tvdb.get_series_episodes(series_id, **params)
 
-        return self._translate_and_strip(result)
+        result = self._translate_and_strip(result)
+        tvdb_cache.set(cache_key, result)
+        return copy.deepcopy(result)
 
     async def get_series_by_slug(self, slug: str) -> dict:
         """Fetch a series record by its slug."""
+        cache_key = f"series_slug:{slug}"
+
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
+
         async with self._rate_limiter:
             result = self._tvdb.get_series_by_slug(slug)
-        return self._translate_and_strip(result)
+
+        result = self._translate_and_strip(result)
+        tvdb_cache.set(cache_key, result)
+        return copy.deepcopy(result)
 
     # ------------------------------------------------------------------
     # Season endpoints
     # ------------------------------------------------------------------
-
-    async def get_season(self, season_id: int) -> dict:
-        """Fetch a season base record by ID."""
-        async with self._rate_limiter:
-            result = self._tvdb.get_season(season_id)
-        return self._translate_and_strip(result)
 
     async def get_season_extended(
         self,
@@ -340,14 +372,38 @@ class TvdbClient:
         include_tags: bool = True,
     ) -> dict:
         """Fetch a season extended record by ID."""
+        cache_key = f"season:{season_id}"
         meta = "translations" if self._result_language is not None else None
+
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            result = copy.deepcopy(cached)
+            self._apply_include_filters(
+                result,
+                include_tags=include_tags,
+                include_content_ratings=False,
+                include_remote_ids=False,
+                include_companies=include_companies,
+                include_awards=False,
+                include_characters=False,
+                include_biographies=False,
+                include_artworks=include_artworks,
+                include_trailers=include_trailers,
+                include_episodes=include_episodes,
+                include_lists="none",
+                include_seasons="none",
+            )
+            return result
+
+        # Cache miss — call API
         async with self._rate_limiter:
             result = self._tvdb.get_season_extended(season_id, meta=meta)
 
         result = self._translate_and_strip(result)
+        tvdb_cache.set(cache_key, result)
 
         return self._apply_include_filters(
-            result,
+            copy.deepcopy(result),
             include_tags=include_tags,
             include_content_ratings=False,
             include_remote_ids=False,
@@ -366,28 +422,25 @@ class TvdbClient:
     # Artwork endpoints
     # ------------------------------------------------------------------
 
-    async def get_artwork(self, artwork_id: int) -> dict:
-        """Fetch an artwork base record by ID."""
-        async with self._rate_limiter:
-            result = self._tvdb.get_artwork(artwork_id)
-        return self._translate_and_strip(result)
-
     async def get_artwork_extended(self, artwork_id: int) -> dict:
         """Fetch an artwork extended record by ID."""
+        cache_key = f"artwork:{artwork_id}"
+
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
+
         meta = "translations" if self._result_language is not None else None
         async with self._rate_limiter:
             result = self._tvdb.get_artwork_extended(artwork_id, meta=meta)
-        return self._translate_and_strip(result)
+
+        result = self._translate_and_strip(result)
+        tvdb_cache.set(cache_key, result)
+        return copy.deepcopy(result)
 
     # ------------------------------------------------------------------
     # Episode endpoints
     # ------------------------------------------------------------------
-
-    async def get_episode(self, episode_id: int) -> dict:
-        """Fetch an episode base record by ID."""
-        async with self._rate_limiter:
-            result = self._tvdb.get_episode(episode_id)
-        return self._translate_and_strip(result)
 
     async def get_episode_extended(
         self,
@@ -402,14 +455,38 @@ class TvdbClient:
         include_trailers: bool = False,
     ) -> dict:
         """Fetch an episode extended record by ID."""
+        cache_key = f"episode:{episode_id}"
         meta = "translations" if self._result_language is not None else None
+
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            result = copy.deepcopy(cached)
+            self._apply_include_filters(
+                result,
+                include_tags=include_tags,
+                include_content_ratings=include_content_ratings,
+                include_remote_ids=include_remote_ids,
+                include_companies=include_companies,
+                include_awards=include_awards,
+                include_characters=include_characters,
+                include_biographies=False,
+                include_artworks=False,
+                include_trailers=include_trailers,
+                include_episodes=False,
+                include_lists="none",
+                include_seasons="all" if include_seasons else "none",
+            )
+            return result
+
+        # Cache miss — call API
         async with self._rate_limiter:
             result = self._tvdb.get_episode_extended(episode_id, meta=meta)
 
         result = self._translate_and_strip(result)
+        tvdb_cache.set(cache_key, result)
 
         return self._apply_include_filters(
-            result,
+            copy.deepcopy(result),
             include_tags=include_tags,
             include_content_ratings=include_content_ratings,
             include_remote_ids=include_remote_ids,
@@ -428,12 +505,6 @@ class TvdbClient:
     # People endpoints
     # ------------------------------------------------------------------
 
-    async def get_person(self, person_id: int) -> dict:
-        """Fetch a person base record by ID."""
-        async with self._rate_limiter:
-            result = self._tvdb.get_person(person_id)
-        return self._translate_and_strip(result)
-
     async def get_person_extended(
         self,
         person_id: int,
@@ -444,14 +515,38 @@ class TvdbClient:
         include_tags: bool = True,
     ) -> dict:
         """Fetch a person extended record by ID."""
+        cache_key = f"person:{person_id}"
         meta = "translations" if self._result_language is not None else None
+
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            result = copy.deepcopy(cached)
+            self._apply_include_filters(
+                result,
+                include_tags=include_tags,
+                include_content_ratings=False,
+                include_remote_ids=include_remote_ids,
+                include_companies=False,
+                include_awards=include_awards,
+                include_characters=include_characters,
+                include_biographies=include_biographies,
+                include_artworks=False,
+                include_trailers=False,
+                include_episodes=False,
+                include_lists="none",
+                include_seasons="none",
+            )
+            return result
+
+        # Cache miss — call API
         async with self._rate_limiter:
             result = self._tvdb.get_person_extended(person_id, meta=meta)
 
         result = self._translate_and_strip(result)
+        tvdb_cache.set(cache_key, result)
 
         return self._apply_include_filters(
-            result,
+            copy.deepcopy(result),
             include_tags=include_tags,
             include_content_ratings=False,
             include_remote_ids=include_remote_ids,
@@ -483,6 +578,14 @@ class TvdbClient:
         remote_id: str | None = None,
     ) -> list:
         """Search TVDB with optional filtering parameters."""
+        cache_key = (
+            f"search:{query}:{type_}:{year}:{offset}:{limit}:{primary_language}:{country}:{director}:{remote_id}"
+        )
+
+        cached = tvdb_cache.get(cache_key)
+        if cached is not None:
+            return copy.deepcopy(cached)
+
         params: dict[str, object] = {
             "type": type_,
             "year": year,
@@ -500,4 +603,6 @@ class TvdbClient:
         async with self._rate_limiter:
             results = self._tvdb.search(query, **params)
 
-        return self._translate_and_strip(results)
+        results = self._translate_and_strip(results)
+        tvdb_cache.set(cache_key, results)
+        return copy.deepcopy(results)

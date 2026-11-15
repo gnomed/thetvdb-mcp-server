@@ -46,10 +46,10 @@ async def tvdb_get_movie(
     include_lists: str = "none",
     include_tags: bool = False,
     include_content_ratings: bool = False,
-    include_remote_ids: bool = True,
-    include_companies: bool = True,
-    include_awards: bool = True,
-    include_releases: bool = True,
+    include_remote_ids: bool = False,
+    include_companies: bool = False,
+    include_awards: bool = False,
+    include_releases: bool = False,
 ) -> dict[str, Any]:
     """Fetch a movie extended record with optional characters, artworks, and trailers.
 
@@ -57,31 +57,22 @@ async def tvdb_get_movie(
     `remoteIds`, `companies`, `awards`, and `releases` arrays are only included
     when the respective `include_*` parameter is True (or set to a non-"none" value).
 
-    TIP: Leave include_* parameters as False unless you specifically need
-    that data. Including them significantly increases the response size.
+    TIP: The include_* options default to false and should be omitted to keep
+    responses small. Only set them to true if you need the additional data.
 
     Args:
         movie_id: Numeric TVDB movie ID.
         include_characters: When True, includes the `characters` array.
-            Leave False unless you specifically need character information.
         include_artworks: When True, includes the `artworks` array.
-            Leave False unless you specifically need artwork information.
         include_trailers: When True, includes the `trailers` array.
-            Leave False unless you specifically need trailer information.
         include_lists: Whether to include the `lists` array. One of:
             "none" (default), "all", or "official" (only official lists).
         include_tags: When True, includes the `tags` array.
-            Leave False unless you specifically need tag information.
         include_content_ratings: When True, includes the `contentRatings` array.
-            Leave False unless you specifically need content rating information.
         include_remote_ids: When True, includes the `remoteIds` array.
-            Leave True unless you specifically want to exclude remote IDs.
         include_companies: When True, includes the `companies` map.
-            Leave True unless you specifically want to exclude company information.
         include_awards: When True, includes the `awards` array.
-            Leave True unless you specifically want to exclude awards.
         include_releases: When True, includes the `releases` array.
-            Leave True unless you specifically want to exclude release information.
 
     Returns:
         Movie extended record with requested arrays.
@@ -143,8 +134,7 @@ async def tvdb_search(
     type="episode", type="season", and type="artwork" will return empty
     results.
 
-    TIP: Use the `type` parameter to narrow results. For a specific show,
-    set type="series". For a person, set type="person". The `remote_id`
+    TIP: Use the `type` parameter to narrow results. The `remote_id`
     parameter (e.g. IMDB ID) is the most precise search method.
 
     Args:
@@ -159,8 +149,8 @@ async def tvdb_search(
         primary_language: 3-character ISO 639-2 language code (e.g. "eng").
             Note: may broaden results rather than filter.
         country: Restrict results to a specific country of origin. Should
-            contain a 3 character country code (e.g. "USA"). Currently only
-            used for series and movies. Note: may return empty results.
+            contain a 3 character country code (e.g. "USA"). Note: may return
+            empty results.
         director: Restrict results to a specific director. Generally only
             used for movies. Should include the full name, e.g. "Steven Spielberg".
         remote_id: Search for a specific remote ID. Allows searching by
@@ -231,9 +221,9 @@ async def tvdb_get_series(
     include_lists: str = "none",
     include_tags: bool = False,
     include_content_ratings: bool = False,
-    include_remote_ids: bool = True,
-    include_seasons: str = "all",
-    include_companies: bool = True,
+    include_remote_ids: bool = False,
+    include_seasons: str = "none",
+    include_companies: bool = False,
     include_trailers: bool = False,
 ) -> dict[str, Any]:
     """Fetch a series extended record with optional arrays.
@@ -242,29 +232,22 @@ async def tvdb_get_series(
     `companies`, and `trailers` arrays are only included when the respective
     `include_*` parameter is True (or set to a non-"none" value).
 
-    TIP: Leave include_* parameters as False unless you specifically need
-    that data. Including them significantly increases the response size.
+    TIP: The include_* options default to false and should be omitted to keep
+    responses small. Only set them to true if you need the additional data.
 
     Args:
         series_id: Numeric TVDB series ID.
         include_characters: When True, includes the `characters` array.
-            Leave False unless you specifically need character information.
         include_artworks: When True, includes the `artworks` array.
-            Leave False unless you specifically need artwork information.
         include_lists: Whether to include the `lists` array. One of:
             "none" (default), "all", or "official" (only official lists).
         include_tags: When True, includes the `tags` array.
-            Leave False unless you specifically need tag information.
         include_content_ratings: When True, includes the `contentRatings` array.
-            Leave False unless you specifically need content rating information.
         include_remote_ids: When True, includes the `remoteIds` array.
-            Leave True unless you specifically want to exclude remote IDs.
         include_seasons: Whether to include the `seasons` array. One of:
-            "none", "all" (default), or a season type string (e.g. "Aired Order").
+            "none" (default), "all", or a season type string (e.g. "Aired Order").
         include_companies: When True, includes the `companies` array.
-            Leave True unless you specifically want to exclude company information.
         include_trailers: When True, includes the `trailers` array.
-            Leave False unless you specifically need trailer information.
 
     Returns:
         Series extended record with requested arrays.
@@ -307,28 +290,26 @@ async def tvdb_get_series_by_slug(slug: str) -> dict[str, Any]:
 async def tvdb_get_season(
     season_id: int,
     include_artworks: bool = False,
-    include_companies: bool = True,
-    include_episodes: bool = True,
+    include_companies: bool = False,
+    include_episodes: bool = False,
     include_trailers: bool = False,
-    include_tags: bool = True,
+    include_tags: bool = False,
 ) -> dict[str, Any]:
     """Fetch a season extended record by its numeric TVDB ID.
 
-    Use the include_* parameters to control which arrays are included.
-    Omitting them uses sensible defaults.
+    The `artworks`, `companies`, `episodes`, `trailers`, and `tags` arrays are
+    only included when the respective `include_*` parameter is True.
+
+    TIP: The include_* options default to false and should be omitted to keep
+    responses small. Only set them to true if you need the additional data.
 
     Args:
         season_id: Numeric TVDB season ID.
         include_artworks: When True, includes the `artworks` array.
-            Leave False unless you specifically need artwork information.
         include_companies: When True, includes the `companies` array.
-            Leave True unless you specifically want to exclude company information.
         include_episodes: When True, includes the `episodes` array.
-            Leave True unless you specifically want to exclude episodes.
         include_trailers: When True, includes the `trailers` array.
-            Leave False unless you specifically need trailer information.
         include_tags: When True, includes the `tags` array.
-            Leave True unless you specifically want to exclude tag information.
 
     Returns:
         Season extended record with requested arrays.
@@ -373,38 +354,34 @@ async def tvdb_get_artwork(artwork_id: int) -> dict[str, Any]:
 
 async def tvdb_get_episode(
     episode_id: int,
-    include_awards: bool = True,
-    include_characters: bool = True,
-    include_companies: bool = True,
-    include_seasons: bool = True,
+    include_awards: bool = False,
+    include_characters: bool = False,
+    include_companies: bool = False,
+    include_seasons: bool = False,
     include_content_ratings: bool = False,
-    include_remote_ids: bool = True,
-    include_tags: bool = True,
+    include_remote_ids: bool = False,
+    include_tags: bool = False,
     include_trailers: bool = False,
 ) -> dict[str, Any]:
     """Fetch an episode extended record by its numeric TVDB ID.
 
-    Use the include_* parameters to control which arrays are included.
-    Omitting them uses sensible defaults.
+    The `awards`, `characters`, `companies`, `seasons`, `contentRatings`,
+    `remoteIds`, `tags`, and `trailers` arrays are only included when the
+    respective `include_*` parameter is True.
+
+    TIP: The include_* options default to false and should be omitted to keep
+    responses small. Only set them to true if you need the additional data.
 
     Args:
         episode_id: Numeric TVDB episode ID.
         include_awards: When True, includes the `awards` array.
-            Leave True unless you specifically want to exclude awards.
         include_characters: When True, includes the `characters` array.
-            Leave True unless you specifically want to exclude characters.
         include_companies: When True, includes the `companies` array.
-            Leave True unless you specifically want to exclude companies.
         include_seasons: When True, includes the `seasons` array.
-            Leave True unless you specifically want to exclude season information.
         include_content_ratings: When True, includes the `contentRatings` array.
-            Leave False unless you specifically need content rating information.
         include_remote_ids: When True, includes the `remoteIds` array.
-            Leave True unless you specifically want to exclude remote IDs.
         include_tags: When True, includes the `tags` array.
-            Leave True unless you specifically want to exclude tag information.
         include_trailers: When True, includes the `trailers` array.
-            Leave False unless you specifically need trailer information.
 
     Returns:
         Episode extended record with requested arrays.
@@ -431,11 +408,11 @@ async def tvdb_get_episode(
 
 async def tvdb_get_person(
     person_id: int,
-    include_awards: bool = True,
-    include_characters: bool = True,
-    include_biographies: bool = True,
-    include_remote_ids: bool = True,
-    include_tags: bool = True,
+    include_awards: bool = False,
+    include_characters: bool = False,
+    include_biographies: bool = False,
+    include_remote_ids: bool = False,
+    include_tags: bool = False,
 ) -> dict[str, Any]:
     """Fetch a person extended record by their numeric TVDB ID.
 
@@ -443,21 +420,19 @@ async def tvdb_get_person(
     formatted ID returned by search results (e.g. "person-327579"). If you
     get a person ID from tvdb_search, strip the "person-" prefix first.
 
-    Use the include_* parameters to control which arrays are included.
-    Omitting them uses sensible defaults.
+    The `awards`, `characters`, `biographies`, `remoteIds`, and `tags` arrays
+    are only included when the respective `include_*` parameter is True.
+
+    TIP: The include_* options default to false and should be omitted to keep
+    responses small. Only set them to true if you need the additional data.
 
     Args:
         person_id: Numeric TVDB person ID (e.g. 327579, not "person-327579").
         include_awards: When True, includes the `awards` array.
-            Leave True unless you specifically want to exclude awards.
         include_characters: When True, includes the `characters` array.
-            Leave True unless you specifically want to exclude characters.
         include_biographies: When True, includes the `biographies` array.
-            Leave True unless you specifically want to exclude biographies.
         include_remote_ids: When True, includes the `remoteIds` array.
-            Leave True unless you specifically want to exclude remote IDs.
         include_tags: When True, includes the `tags` array.
-            Leave True unless you specifically want to exclude tag information.
 
     Returns:
         Person extended record with requested arrays.
