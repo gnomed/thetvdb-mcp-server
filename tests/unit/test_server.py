@@ -9,17 +9,12 @@ from thetvdb_mcp_server.config import AppConfig, LoggingConfig, ServerConfig, Tv
 from thetvdb_mcp_server.tools import (
     init_tools,
     tvdb_get_artwork,
-    tvdb_get_artwork_extended,
     tvdb_get_episode,
-    tvdb_get_episode_extended,
     tvdb_get_person,
-    tvdb_get_person_extended,
     tvdb_get_season,
-    tvdb_get_season_extended,
     tvdb_get_series,
     tvdb_get_series_by_slug,
     tvdb_get_series_episodes,
-    tvdb_get_series_extended,
     tvdb_search,
 )
 
@@ -40,16 +35,11 @@ def register_tools(mcp, config, mock_client=None):
         init_tools(config)
 
     mcp.tool(name="tvdb_get_series")(tvdb_get_series)
-    mcp.tool(name="tvdb_get_series_extended")(tvdb_get_series_extended)
     mcp.tool(name="tvdb_get_series_by_slug")(tvdb_get_series_by_slug)
     mcp.tool(name="tvdb_get_season")(tvdb_get_season)
-    mcp.tool(name="tvdb_get_season_extended")(tvdb_get_season_extended)
     mcp.tool(name="tvdb_get_artwork")(tvdb_get_artwork)
-    mcp.tool(name="tvdb_get_artwork_extended")(tvdb_get_artwork_extended)
     mcp.tool(name="tvdb_get_episode")(tvdb_get_episode)
-    mcp.tool(name="tvdb_get_episode_extended")(tvdb_get_episode_extended)
     mcp.tool(name="tvdb_get_person")(tvdb_get_person)
-    mcp.tool(name="tvdb_get_person_extended")(tvdb_get_person_extended)
     mcp.tool(name="tvdb_search")(tvdb_search)
     mcp.tool(name="tvdb_get_series_episodes")(tvdb_get_series_episodes)
 
@@ -62,16 +52,11 @@ async def get_registered_tool_names(mcp):
 
 EXPECTED_TOOL_NAMES = [
     "tvdb_get_series",
-    "tvdb_get_series_extended",
     "tvdb_get_series_by_slug",
     "tvdb_get_season",
-    "tvdb_get_season_extended",
     "tvdb_get_artwork",
-    "tvdb_get_artwork_extended",
     "tvdb_get_episode",
-    "tvdb_get_episode_extended",
     "tvdb_get_person",
-    "tvdb_get_person_extended",
     "tvdb_search",
     "tvdb_get_series_episodes",
 ]
@@ -87,7 +72,7 @@ async def test_all_tools_registered() -> None:
 
     for tool_name in EXPECTED_TOOL_NAMES:
         assert tool_name in registered, f"Missing tool: {tool_name}"
-    assert len(registered) == 13
+    assert len(registered) == 8
 
 
 @pytest.mark.asyncio
@@ -146,7 +131,7 @@ async def test_series_extended_defaults() -> None:
     register_tools(mcp, make_config())
 
     tools = await mcp.list_tools()
-    series_ext_tool = next(t for t in tools if t.name == "tvdb_get_series_extended")
+    series_ext_tool = next(t for t in tools if t.name == "tvdb_get_series")
 
     assert series_ext_tool.parameters["properties"]["include_characters"]["default"] is False
     assert series_ext_tool.parameters["properties"]["include_artworks"]["default"] is False

@@ -19,20 +19,14 @@ from thetvdb_mcp_server.logging import make_logger
 from thetvdb_mcp_server.tools import (
     init_tools,
     tvdb_get_artwork,
-    tvdb_get_artwork_extended,
     tvdb_get_episode,
-    tvdb_get_episode_extended,
     tvdb_get_movie,
     tvdb_get_movie_by_slug,
-    tvdb_get_movie_extended,
     tvdb_get_person,
-    tvdb_get_person_extended,
     tvdb_get_season,
-    tvdb_get_season_extended,
     tvdb_get_series,
     tvdb_get_series_by_slug,
     tvdb_get_series_episodes,
-    tvdb_get_series_extended,
     tvdb_search,
 )
 
@@ -54,21 +48,15 @@ def main() -> None:
     logger = make_logger(config.logging.level)
     init_tools(config)
 
-    # Register all 16 tools
+    # Register all 10 tools
     mcp.tool(name="tvdb_get_movie")(tvdb_get_movie)
-    mcp.tool(name="tvdb_get_movie_extended")(tvdb_get_movie_extended)
     mcp.tool(name="tvdb_get_movie_by_slug")(tvdb_get_movie_by_slug)
     mcp.tool(name="tvdb_get_series")(tvdb_get_series)
-    mcp.tool(name="tvdb_get_series_extended")(tvdb_get_series_extended)
     mcp.tool(name="tvdb_get_series_by_slug")(tvdb_get_series_by_slug)
     mcp.tool(name="tvdb_get_season")(tvdb_get_season)
-    mcp.tool(name="tvdb_get_season_extended")(tvdb_get_season_extended)
     mcp.tool(name="tvdb_get_artwork")(tvdb_get_artwork)
-    mcp.tool(name="tvdb_get_artwork_extended")(tvdb_get_artwork_extended)
     mcp.tool(name="tvdb_get_episode")(tvdb_get_episode)
-    mcp.tool(name="tvdb_get_episode_extended")(tvdb_get_episode_extended)
     mcp.tool(name="tvdb_get_person")(tvdb_get_person)
-    mcp.tool(name="tvdb_get_person_extended")(tvdb_get_person_extended)
     mcp.tool(name="tvdb_search")(tvdb_search)
     mcp.tool(name="tvdb_get_series_episodes")(tvdb_get_series_episodes)
 

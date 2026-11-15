@@ -132,14 +132,13 @@ async def run_tests() -> int:
 
     # 3. Series tools
     print("\nSeries tools:")
-    await run_tool("series_reacher_base", tools.tvdb_get_series, reacher_series_id)
-
     await run_tool(
-        "series_reacher_extended_options_off",
-        tools.tvdb_get_series_extended,
+        "series_reacher_options_off",
+        tools.tvdb_get_series,
         reacher_series_id,
         include_characters=False,
         include_artworks=False,
+        include_trailers=False,
         include_lists="none",
         include_tags=False,
         include_content_ratings=False,
@@ -149,11 +148,12 @@ async def run_tests() -> int:
     )
 
     await run_tool(
-        "series_reacher_extended_options_on",
-        tools.tvdb_get_series_extended,
+        "series_reacher_options_on",
+        tools.tvdb_get_series,
         reacher_series_id,
         include_characters=True,
         include_artworks=True,
+        include_trailers=True,
         include_lists="all",
         include_tags=True,
         include_content_ratings=True,
@@ -165,7 +165,7 @@ async def run_tests() -> int:
     await run_tool("series_reacher_by_slug", tools.tvdb_get_series_by_slug, "reacher")
 
     # Extract season, episode, artwork, and person IDs from extended result
-    extended = await tools.tvdb_get_series_extended(
+    extended = await tools.tvdb_get_series(
         reacher_series_id,
         include_characters=True,
         include_artworks=True,
@@ -192,11 +192,25 @@ async def run_tests() -> int:
     # 4. Season tools
     print("\nSeason tools:")
     if reacher_season_id:
-        await run_tool("season_reacher_base", tools.tvdb_get_season, reacher_season_id)
         await run_tool(
-            "season_reacher_extended",
-            tools.tvdb_get_season_extended,
+            "season_reacher_options_off",
+            tools.tvdb_get_season,
             reacher_season_id,
+            include_artworks=False,
+            include_companies=False,
+            include_episodes=False,
+            include_trailers=False,
+            include_tags=False,
+        )
+        await run_tool(
+            "season_reacher_options_on",
+            tools.tvdb_get_season,
+            reacher_season_id,
+            include_artworks=True,
+            include_companies=True,
+            include_episodes=True,
+            include_trailers=True,
+            include_tags=True,
         )
 
     # 5. Episode tools
@@ -209,61 +223,71 @@ async def run_tests() -> int:
             reacher_episode_id = episodes[0]["id"]
 
     if reacher_episode_id:
-        await run_tool("episode_reacher_base", tools.tvdb_get_episode, reacher_episode_id)
         await run_tool(
-            "episode_reacher_extended_options_off",
-            tools.tvdb_get_episode_extended,
+            "episode_reacher_options_off",
+            tools.tvdb_get_episode,
             reacher_episode_id,
             include_awards=False,
             include_characters=False,
             include_companies=False,
+            include_seasons=False,
+            include_content_ratings=False,
+            include_remote_ids=False,
+            include_tags=False,
+            include_trailers=False,
         )
         await run_tool(
-            "episode_reacher_extended_options_on",
-            tools.tvdb_get_episode_extended,
+            "episode_reacher_options_on",
+            tools.tvdb_get_episode,
             reacher_episode_id,
             include_awards=True,
             include_characters=True,
             include_companies=True,
+            include_seasons=True,
+            include_content_ratings=True,
+            include_remote_ids=True,
+            include_tags=True,
+            include_trailers=True,
         )
 
     # 6. Artwork tools
     print("\nArtwork tools:")
     if reacher_artwork_id:
-        await run_tool("artwork_reacher_base", tools.tvdb_get_artwork, reacher_artwork_id)
         await run_tool(
-            "artwork_reacher_extended",
-            tools.tvdb_get_artwork_extended,
+            "artwork_reacher",
+            tools.tvdb_get_artwork,
             reacher_artwork_id,
         )
 
     # 7. Person tools
     print("\nPerson tools:")
     if reacher_person_id:
-        await run_tool("person_reacher_base", tools.tvdb_get_person, reacher_person_id)
         await run_tool(
-            "person_reacher_extended_options_off",
-            tools.tvdb_get_person_extended,
+            "person_reacher_options_off",
+            tools.tvdb_get_person,
             reacher_person_id,
             include_awards=False,
             include_characters=False,
             include_biographies=False,
+            include_remote_ids=False,
+            include_tags=False,
         )
         await run_tool(
-            "person_reacher_extended_options_on",
-            tools.tvdb_get_person_extended,
+            "person_reacher_options_on",
+            tools.tvdb_get_person,
             reacher_person_id,
             include_awards=True,
             include_characters=True,
             include_biographies=True,
+            include_remote_ids=True,
+            include_tags=True,
         )
 
     # 8. Movie tools
     print("\nMovie tools:")
-    await run_tool("movie_matrix_base", tools.tvdb_get_movie, matrix_movie_id)
     await run_tool(
-        "movie_matrix_extended_options_off",
-        tools.tvdb_get_movie_extended,
+        "movie_matrix_options_off",
+        tools.tvdb_get_movie,
         matrix_movie_id,
         include_characters=False,
         include_artworks=False,
@@ -273,10 +297,12 @@ async def run_tests() -> int:
         include_content_ratings=False,
         include_remote_ids=False,
         include_companies=False,
+        include_awards=False,
+        include_releases=False,
     )
     await run_tool(
-        "movie_matrix_extended_options_on",
-        tools.tvdb_get_movie_extended,
+        "movie_matrix_options_on",
+        tools.tvdb_get_movie,
         matrix_movie_id,
         include_characters=True,
         include_artworks=True,
@@ -286,6 +312,8 @@ async def run_tests() -> int:
         include_content_ratings=True,
         include_remote_ids=True,
         include_companies=True,
+        include_awards=True,
+        include_releases=True,
     )
     await run_tool("movie_matrix_by_slug", tools.tvdb_get_movie_by_slug, "the-matrix")
 

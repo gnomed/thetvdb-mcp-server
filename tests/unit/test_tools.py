@@ -8,20 +8,14 @@ from thetvdb_mcp_server.config import AppConfig, LoggingConfig, ServerConfig, Tv
 from thetvdb_mcp_server.tools import (
     init_tools,
     tvdb_get_artwork,
-    tvdb_get_artwork_extended,
     tvdb_get_episode,
-    tvdb_get_episode_extended,
     tvdb_get_movie,
     tvdb_get_movie_by_slug,
-    tvdb_get_movie_extended,
     tvdb_get_person,
-    tvdb_get_person_extended,
     tvdb_get_season,
-    tvdb_get_season_extended,
     tvdb_get_series,
     tvdb_get_series_by_slug,
     tvdb_get_series_episodes,
-    tvdb_get_series_extended,
     tvdb_search,
 )
 
@@ -29,7 +23,6 @@ from thetvdb_mcp_server.tools import (
 def make_mock_client():
     """Return a mock TvdbClient with all methods as AsyncMocks."""
     mock = MagicMock()
-    mock.get_movie = AsyncMock(return_value={"id": 1, "name": "Test Movie"})
     mock.get_movie_extended = AsyncMock(
         return_value={
             "id": 1,
@@ -40,7 +33,6 @@ def make_mock_client():
         }
     )
     mock.get_movie_by_slug = AsyncMock(return_value={"id": 1, "name": "Test Movie"})
-    mock.get_series = AsyncMock(return_value={"id": 1, "name": "Test Series"})
     mock.get_series_extended = AsyncMock(
         return_value={
             "id": 1,
@@ -56,13 +48,9 @@ def make_mock_client():
         }
     )
     mock.get_series_by_slug = AsyncMock(return_value={"id": 1, "name": "Test Series"})
-    mock.get_season = AsyncMock(return_value={"id": 1, "name": "Season 1"})
     mock.get_season_extended = AsyncMock(return_value={"id": 1, "name": "Season 1"})
-    mock.get_artwork = AsyncMock(return_value={"id": 1, "name": "Artwork 1"})
     mock.get_artwork_extended = AsyncMock(return_value={"id": 1, "name": "Artwork 1"})
-    mock.get_episode = AsyncMock(return_value={"id": 1, "name": "Episode 1"})
     mock.get_episode_extended = AsyncMock(return_value={"id": 1, "name": "Episode 1"})
-    mock.get_person = AsyncMock(return_value={"id": 1, "name": "Person 1"})
     mock.get_person_extended = AsyncMock(return_value={"id": 1, "name": "Person 1"})
     mock.search = AsyncMock(return_value=[{"id": 1, "name": "Test"}])
     return mock
@@ -91,28 +79,14 @@ def patched_tools(mock_client):
 
 
 # ======================================================================
-# tvdb_get_movie
-# ======================================================================
-
-
-@pytest.mark.asyncio
-async def test_get_movie(patched_tools) -> None:
-    """tvdb_get_movie calls client.get_movie and returns result."""
-    result = await tvdb_get_movie(1000)
-
-    patched_tools.get_movie.assert_called_once_with(1000)
-    assert result["id"] == 1
-
-
-# ======================================================================
 # tvdb_get_movie_extended
 # ======================================================================
 
 
 @pytest.mark.asyncio
 async def test_get_movie_extended_defaults(patched_tools) -> None:
-    """tvdb_get_movie_extended uses default include_ params (all False)."""
-    await tvdb_get_movie_extended(1000)
+    """tvdb_get_movie_extended uses default include_ params."""
+    await tvdb_get_movie(1000)
 
     patched_tools.get_movie_extended.assert_called_once_with(
         1000,
@@ -124,13 +98,15 @@ async def test_get_movie_extended_defaults(patched_tools) -> None:
         include_content_ratings=False,
         include_remote_ids=True,
         include_companies=True,
+        include_awards=True,
+        include_releases=True,
     )
 
 
 @pytest.mark.asyncio
 async def test_get_movie_extended_characters_only(patched_tools) -> None:
     """tvdb_get_movie_extended passes include_characters=True."""
-    await tvdb_get_movie_extended(1000, include_characters=True)
+    await tvdb_get_movie(1000, include_characters=True)
 
     patched_tools.get_movie_extended.assert_called_once_with(
         1000,
@@ -142,13 +118,15 @@ async def test_get_movie_extended_characters_only(patched_tools) -> None:
         include_content_ratings=False,
         include_remote_ids=True,
         include_companies=True,
+        include_awards=True,
+        include_releases=True,
     )
 
 
 @pytest.mark.asyncio
 async def test_get_movie_extended_artworks_only(patched_tools) -> None:
     """tvdb_get_movie_extended passes include_artworks=True."""
-    await tvdb_get_movie_extended(1000, include_artworks=True)
+    await tvdb_get_movie(1000, include_artworks=True)
 
     patched_tools.get_movie_extended.assert_called_once_with(
         1000,
@@ -160,13 +138,15 @@ async def test_get_movie_extended_artworks_only(patched_tools) -> None:
         include_content_ratings=False,
         include_remote_ids=True,
         include_companies=True,
+        include_awards=True,
+        include_releases=True,
     )
 
 
 @pytest.mark.asyncio
 async def test_get_movie_extended_trailers_only(patched_tools) -> None:
     """tvdb_get_movie_extended passes include_trailers=True."""
-    await tvdb_get_movie_extended(1000, include_trailers=True)
+    await tvdb_get_movie(1000, include_trailers=True)
 
     patched_tools.get_movie_extended.assert_called_once_with(
         1000,
@@ -178,13 +158,15 @@ async def test_get_movie_extended_trailers_only(patched_tools) -> None:
         include_content_ratings=False,
         include_remote_ids=True,
         include_companies=True,
+        include_awards=True,
+        include_releases=True,
     )
 
 
 @pytest.mark.asyncio
 async def test_get_movie_extended_all(patched_tools) -> None:
     """tvdb_get_movie_extended passes all include_ params as True."""
-    await tvdb_get_movie_extended(
+    await tvdb_get_movie(
         1000,
         include_characters=True,
         include_artworks=True,
@@ -201,6 +183,48 @@ async def test_get_movie_extended_all(patched_tools) -> None:
         include_content_ratings=False,
         include_remote_ids=True,
         include_companies=True,
+        include_awards=True,
+        include_releases=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_awards_param(patched_tools) -> None:
+    """tvdb_get_movie_extended passes include_awards."""
+    await tvdb_get_movie(1000, include_awards=False)
+
+    patched_tools.get_movie_extended.assert_called_once_with(
+        1000,
+        include_characters=False,
+        include_artworks=False,
+        include_trailers=False,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_companies=True,
+        include_awards=False,
+        include_releases=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_movie_extended_releases_param(patched_tools) -> None:
+    """tvdb_get_movie_extended passes include_releases."""
+    await tvdb_get_movie(1000, include_releases=False)
+
+    patched_tools.get_movie_extended.assert_called_once_with(
+        1000,
+        include_characters=False,
+        include_artworks=False,
+        include_trailers=False,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_companies=True,
+        include_awards=True,
+        include_releases=False,
     )
 
 
@@ -293,28 +317,14 @@ async def test_episodes_all_params(patched_tools) -> None:
 
 
 # ======================================================================
-# tvdb_get_series
-# ======================================================================
-
-
-@pytest.mark.asyncio
-async def test_get_series(patched_tools) -> None:
-    """tvdb_get_series calls client.get_series and returns result."""
-    result = await tvdb_get_series(78804)
-
-    patched_tools.get_series.assert_called_once_with(78804)
-    assert result["id"] == 1
-
-
-# ======================================================================
 # tvdb_get_series_extended
 # ======================================================================
 
 
 @pytest.mark.asyncio
 async def test_get_series_extended_defaults(patched_tools) -> None:
-    """tvdb_get_series_extended uses default include_ params (both False)."""
-    await tvdb_get_series_extended(78804)
+    """tvdb_get_series_extended uses default include_ params."""
+    await tvdb_get_series(78804)
 
     patched_tools.get_series_extended.assert_called_once_with(
         78804,
@@ -326,13 +336,14 @@ async def test_get_series_extended_defaults(patched_tools) -> None:
         include_remote_ids=True,
         include_seasons="all",
         include_companies=True,
+        include_trailers=False,
     )
 
 
 @pytest.mark.asyncio
 async def test_get_series_extended_characters_only(patched_tools) -> None:
     """tvdb_get_series_extended passes include_characters=True."""
-    await tvdb_get_series_extended(78804, include_characters=True)
+    await tvdb_get_series(78804, include_characters=True)
 
     patched_tools.get_series_extended.assert_called_once_with(
         78804,
@@ -344,13 +355,14 @@ async def test_get_series_extended_characters_only(patched_tools) -> None:
         include_remote_ids=True,
         include_seasons="all",
         include_companies=True,
+        include_trailers=False,
     )
 
 
 @pytest.mark.asyncio
 async def test_get_series_extended_artworks_only(patched_tools) -> None:
     """tvdb_get_series_extended passes include_artworks=True."""
-    await tvdb_get_series_extended(78804, include_artworks=True)
+    await tvdb_get_series(78804, include_artworks=True)
 
     patched_tools.get_series_extended.assert_called_once_with(
         78804,
@@ -362,13 +374,14 @@ async def test_get_series_extended_artworks_only(patched_tools) -> None:
         include_remote_ids=True,
         include_seasons="all",
         include_companies=True,
+        include_trailers=False,
     )
 
 
 @pytest.mark.asyncio
 async def test_get_series_extended_both(patched_tools) -> None:
     """tvdb_get_series_extended passes both include_ params as True."""
-    await tvdb_get_series_extended(78804, include_characters=True, include_artworks=True)
+    await tvdb_get_series(78804, include_characters=True, include_artworks=True)
 
     patched_tools.get_series_extended.assert_called_once_with(
         78804,
@@ -380,6 +393,26 @@ async def test_get_series_extended_both(patched_tools) -> None:
         include_remote_ids=True,
         include_seasons="all",
         include_companies=True,
+        include_trailers=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_series_extended_trailers_param(patched_tools) -> None:
+    """tvdb_get_series_extended passes include_trailers."""
+    await tvdb_get_series(78804, include_trailers=True)
+
+    patched_tools.get_series_extended.assert_called_once_with(
+        78804,
+        include_characters=False,
+        include_artworks=False,
+        include_lists="none",
+        include_tags=False,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_seasons="all",
+        include_companies=True,
+        include_trailers=True,
     )
 
 
@@ -398,45 +431,46 @@ async def test_get_series_by_slug(patched_tools) -> None:
 
 
 # ======================================================================
-# tvdb_get_season
-# ======================================================================
-
-
-@pytest.mark.asyncio
-async def test_get_season(patched_tools) -> None:
-    """tvdb_get_season calls client.get_season."""
-    result = await tvdb_get_season(12345)
-
-    patched_tools.get_season.assert_called_once_with(12345)
-    assert result["id"] == 1
-
-
-# ======================================================================
 # tvdb_get_season_extended
 # ======================================================================
 
 
 @pytest.mark.asyncio
 async def test_get_season_extended(patched_tools) -> None:
-    """tvdb_get_season_extended calls client.get_season_extended."""
-    result = await tvdb_get_season_extended(12345)
+    """tvdb_get_season_extended calls client.get_season_extended with defaults."""
+    result = await tvdb_get_season(12345)
 
-    patched_tools.get_season_extended.assert_called_once_with(12345)
+    patched_tools.get_season_extended.assert_called_once_with(
+        12345,
+        include_artworks=False,
+        include_companies=True,
+        include_episodes=True,
+        include_trailers=False,
+        include_tags=True,
+    )
     assert result["id"] == 1
-
-
-# ======================================================================
-# tvdb_get_artwork
-# ======================================================================
 
 
 @pytest.mark.asyncio
-async def test_get_artwork(patched_tools) -> None:
-    """tvdb_get_artwork calls client.get_artwork."""
-    result = await tvdb_get_artwork(67890)
+async def test_get_season_extended_custom_params(patched_tools) -> None:
+    """tvdb_get_season_extended passes custom include_ params."""
+    await tvdb_get_season(
+        12345,
+        include_artworks=True,
+        include_companies=False,
+        include_episodes=False,
+        include_trailers=True,
+        include_tags=False,
+    )
 
-    patched_tools.get_artwork.assert_called_once_with(67890)
-    assert result["id"] == 1
+    patched_tools.get_season_extended.assert_called_once_with(
+        12345,
+        include_artworks=True,
+        include_companies=False,
+        include_episodes=False,
+        include_trailers=True,
+        include_tags=False,
+    )
 
 
 # ======================================================================
@@ -447,23 +481,9 @@ async def test_get_artwork(patched_tools) -> None:
 @pytest.mark.asyncio
 async def test_get_artwork_extended(patched_tools) -> None:
     """tvdb_get_artwork_extended calls client.get_artwork_extended."""
-    result = await tvdb_get_artwork_extended(67890)
+    result = await tvdb_get_artwork(67890)
 
     patched_tools.get_artwork_extended.assert_called_once_with(67890)
-    assert result["id"] == 1
-
-
-# ======================================================================
-# tvdb_get_episode
-# ======================================================================
-
-
-@pytest.mark.asyncio
-async def test_get_episode(patched_tools) -> None:
-    """tvdb_get_episode calls client.get_episode."""
-    result = await tvdb_get_episode(11111)
-
-    patched_tools.get_episode.assert_called_once_with(11111)
     assert result["id"] == 1
 
 
@@ -474,30 +494,49 @@ async def test_get_episode(patched_tools) -> None:
 
 @pytest.mark.asyncio
 async def test_get_episode_extended(patched_tools) -> None:
-    """tvdb_get_episode_extended calls client.get_episode_extended."""
-    result = await tvdb_get_episode_extended(11111)
+    """tvdb_get_episode_extended calls client.get_episode_extended with defaults."""
+    result = await tvdb_get_episode(11111)
 
     patched_tools.get_episode_extended.assert_called_once_with(
         11111,
         include_awards=True,
         include_characters=True,
         include_companies=True,
+        include_seasons=True,
+        include_content_ratings=False,
+        include_remote_ids=True,
+        include_tags=True,
+        include_trailers=False,
     )
     assert result["id"] == 1
 
 
-# ======================================================================
-# tvdb_get_person
-# ======================================================================
-
-
 @pytest.mark.asyncio
-async def test_get_person(patched_tools) -> None:
-    """tvdb_get_person calls client.get_person."""
-    result = await tvdb_get_person(22222)
+async def test_get_episode_extended_custom_params(patched_tools) -> None:
+    """tvdb_get_episode_extended passes custom include_ params."""
+    await tvdb_get_episode(
+        11111,
+        include_awards=False,
+        include_characters=False,
+        include_companies=False,
+        include_seasons=False,
+        include_content_ratings=True,
+        include_remote_ids=False,
+        include_tags=False,
+        include_trailers=True,
+    )
 
-    patched_tools.get_person.assert_called_once_with(22222)
-    assert result["id"] == 1
+    patched_tools.get_episode_extended.assert_called_once_with(
+        11111,
+        include_awards=False,
+        include_characters=False,
+        include_companies=False,
+        include_seasons=False,
+        include_content_ratings=True,
+        include_remote_ids=False,
+        include_tags=False,
+        include_trailers=True,
+    )
 
 
 # ======================================================================
@@ -507,16 +546,40 @@ async def test_get_person(patched_tools) -> None:
 
 @pytest.mark.asyncio
 async def test_get_person_extended(patched_tools) -> None:
-    """tvdb_get_person_extended calls client.get_person_extended."""
-    result = await tvdb_get_person_extended(22222)
+    """tvdb_get_person_extended calls client.get_person_extended with defaults."""
+    result = await tvdb_get_person(22222)
 
     patched_tools.get_person_extended.assert_called_once_with(
         22222,
         include_awards=True,
         include_characters=True,
         include_biographies=True,
+        include_remote_ids=True,
+        include_tags=True,
     )
     assert result["id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_person_extended_custom_params(patched_tools) -> None:
+    """tvdb_get_person_extended passes custom include_ params."""
+    await tvdb_get_person(
+        22222,
+        include_awards=False,
+        include_characters=False,
+        include_biographies=False,
+        include_remote_ids=False,
+        include_tags=False,
+    )
+
+    patched_tools.get_person_extended.assert_called_once_with(
+        22222,
+        include_awards=False,
+        include_characters=False,
+        include_biographies=False,
+        include_remote_ids=False,
+        include_tags=False,
+    )
 
 
 # ======================================================================
@@ -561,19 +624,11 @@ async def test_episodes_raises_without_init() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_series_raises_without_init() -> None:
-    """tvdb_get_series raises RuntimeError if init_tools() not called."""
-    with patch("thetvdb_mcp_server.tools._client", None):
-        with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_series(78804)
-
-
-@pytest.mark.asyncio
 async def test_get_series_extended_raises_without_init() -> None:
     """tvdb_get_series_extended raises RuntimeError if init_tools() not called."""
     with patch("thetvdb_mcp_server.tools._client", None):
         with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_series_extended(78804)
+            await tvdb_get_series(78804)
 
 
 @pytest.mark.asyncio
@@ -585,27 +640,11 @@ async def test_get_series_by_slug_raises_without_init() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_season_raises_without_init() -> None:
-    """tvdb_get_season raises RuntimeError if init_tools() not called."""
-    with patch("thetvdb_mcp_server.tools._client", None):
-        with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_season(12345)
-
-
-@pytest.mark.asyncio
 async def test_get_season_extended_raises_without_init() -> None:
     """tvdb_get_season_extended raises RuntimeError if init_tools() not called."""
     with patch("thetvdb_mcp_server.tools._client", None):
         with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_season_extended(12345)
-
-
-@pytest.mark.asyncio
-async def test_get_artwork_raises_without_init() -> None:
-    """tvdb_get_artwork raises RuntimeError if init_tools() not called."""
-    with patch("thetvdb_mcp_server.tools._client", None):
-        with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_artwork(67890)
+            await tvdb_get_season(12345)
 
 
 @pytest.mark.asyncio
@@ -613,15 +652,7 @@ async def test_get_artwork_extended_raises_without_init() -> None:
     """tvdb_get_artwork_extended raises RuntimeError if init_tools() not called."""
     with patch("thetvdb_mcp_server.tools._client", None):
         with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_artwork_extended(67890)
-
-
-@pytest.mark.asyncio
-async def test_get_episode_raises_without_init() -> None:
-    """tvdb_get_episode raises RuntimeError if init_tools() not called."""
-    with patch("thetvdb_mcp_server.tools._client", None):
-        with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_episode(11111)
+            await tvdb_get_artwork(67890)
 
 
 @pytest.mark.asyncio
@@ -629,15 +660,7 @@ async def test_get_episode_extended_raises_without_init() -> None:
     """tvdb_get_episode_extended raises RuntimeError if init_tools() not called."""
     with patch("thetvdb_mcp_server.tools._client", None):
         with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_episode_extended(11111)
-
-
-@pytest.mark.asyncio
-async def test_get_person_raises_without_init() -> None:
-    """tvdb_get_person raises RuntimeError if init_tools() not called."""
-    with patch("thetvdb_mcp_server.tools._client", None):
-        with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_person(22222)
+            await tvdb_get_episode(11111)
 
 
 @pytest.mark.asyncio
@@ -645,7 +668,7 @@ async def test_get_person_extended_raises_without_init() -> None:
     """tvdb_get_person_extended raises RuntimeError if init_tools() not called."""
     with patch("thetvdb_mcp_server.tools._client", None):
         with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_person_extended(22222)
+            await tvdb_get_person(22222)
 
 
 # ======================================================================
@@ -654,19 +677,11 @@ async def test_get_person_extended_raises_without_init() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_movie_raises_without_init() -> None:
-    """tvdb_get_movie raises RuntimeError if init_tools() not called."""
-    with patch("thetvdb_mcp_server.tools._client", None):
-        with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_movie(1000)
-
-
-@pytest.mark.asyncio
 async def test_get_movie_extended_raises_without_init() -> None:
     """tvdb_get_movie_extended raises RuntimeError if init_tools() not called."""
     with patch("thetvdb_mcp_server.tools._client", None):
         with pytest.raises(RuntimeError, match="init_tools"):
-            await tvdb_get_movie_extended(1000)
+            await tvdb_get_movie(1000)
 
 
 @pytest.mark.asyncio
