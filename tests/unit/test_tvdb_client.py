@@ -346,6 +346,54 @@ async def test_get_series_episodes_passes_page(client, mock_tvdb) -> None:
     assert kwargs["page"] == 5
 
 
+@pytest.mark.asyncio
+async def test_get_series_episodes_includes_pagination(client, mock_tvdb) -> None:
+    """get_series_episodes includes pagination metadata in response."""
+    mock_tvdb.get_req_links = MagicMock(
+        return_value={
+            "page_size": 25,
+            "total_items": 100,
+            "next": "https://api.example.com/series/78804/episodes/default?page=1",
+            "prev": None,
+            "self": "https://api.example.com/series/78804/episodes/default?page=0",
+        }
+    )
+    result = await client.get_series_episodes(78804, season_type="default", page=0)
+    assert result["pagination"]["page"] == 0
+    assert result["pagination"]["page_size"] == 25
+    assert result["pagination"]["total_items"] == 100
+    assert result["pagination"]["has_next"] is True
+    assert result["pagination"]["has_prev"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_series_episodes_pagination_last_page(client, mock_tvdb) -> None:
+    """get_series_episodes pagination shows has_next=False on last page."""
+    mock_tvdb.get_req_links = MagicMock(
+        return_value={"page_size": 25, "total_items": 50, "next": None, "prev": "...", "self": "..."}
+    )
+    result = await client.get_series_episodes(78804, season_type="default", page=2)
+    assert result["pagination"]["page"] == 2
+    assert result["pagination"]["has_next"] is False
+    assert result["pagination"]["has_prev"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_series_episodes_pagination_cached(client, mock_tvdb) -> None:
+    """get_series_episodes pagination info is preserved in cached responses."""
+    mock_tvdb.get_req_links = MagicMock(
+        return_value={"page_size": 25, "total_items": 75, "next": "url", "prev": None, "self": "url"}
+    )
+    # First call - cache miss
+    result1 = await client.get_series_episodes(78804, season_type="default", page=0)
+    assert result1["pagination"]["has_next"] is True
+
+    # Second call - cache hit (should still have pagination)
+    result2 = await client.get_series_episodes(78804, season_type="default", page=0)
+    assert result2["pagination"]["has_next"] is True
+    assert result2["pagination"]["total_items"] == 75
+
+
 # ======================================================================
 # get_series_by_slug
 # ======================================================================
@@ -510,6 +558,7 @@ async def test_get_person_extended_default_filters(client, mock_tvdb) -> None:
 @pytest.mark.asyncio
 async def test_search_without_language(client, mock_tvdb) -> None:
     """search without language does not include it in params."""
+    mock_tvdb.get_req_links = MagicMock(return_value=None)
     await client.search("doctor who", type_="series")
 
     _, kwargs = mock_tvdb.search.call_args
@@ -519,6 +568,7 @@ async def test_search_without_language(client, mock_tvdb) -> None:
 @pytest.mark.asyncio
 async def test_search_with_language(client, mock_tvdb) -> None:
     """search with language includes it in params."""
+    mock_tvdb.get_req_links = MagicMock(return_value=None)
     await client.search("doctor who", type_="series", primary_language="eng")
 
     _, kwargs = mock_tvdb.search.call_args
@@ -528,6 +578,7 @@ async def test_search_with_language(client, mock_tvdb) -> None:
 @pytest.mark.asyncio
 async def test_search_passes_all_params(client, mock_tvdb) -> None:
     """search passes all provided params to TVDB."""
+    mock_tvdb.get_req_links = MagicMock(return_value=None)
     await client.search("doctor who", type_="series", year=2005, offset=10, limit=5)
 
     _, kwargs = mock_tvdb.search.call_args
@@ -540,6 +591,7 @@ async def test_search_passes_all_params(client, mock_tvdb) -> None:
 @pytest.mark.asyncio
 async def test_search_defaults(client, mock_tvdb) -> None:
     """search uses default values for optional params."""
+    mock_tvdb.get_req_links = MagicMock(return_value=None)
     await client.search("doctor who")
 
     _, kwargs = mock_tvdb.search.call_args
@@ -547,6 +599,48 @@ async def test_search_defaults(client, mock_tvdb) -> None:
     assert kwargs["year"] is None
     assert kwargs["offset"] == 0
     assert kwargs["limit"] == 10
+
+
+@pytest.mark.asyncio
+async def test_search_includes_pagination(client, mock_tvdb) -> None:
+    """search includes pagination metadata in response."""
+    mock_tvdb.search = MagicMock(return_value=[{"id": 1, "name": "Test"}])
+    mock_tvdb.get_req_links = MagicMock(
+        return_value={"page_size": 10, "total_items": 50, "next": "url", "prev": None, "self": "url"}
+    )
+    result = await client.search("doctor who", type_="series", offset=0, limit=10)
+    assert len(result["results"]) == 1
+    assert result["pagination"]["offset"] == 0
+    assert result["pagination"]["limit"] == 10
+    assert result["pagination"]["total_items"] == 50
+    assert result["pagination"]["has_next"] is True
+
+
+@pytest.mark.asyncio
+async def test_search_pagination_last_page(client, mock_tvdb) -> None:
+    """search pagination shows has_next=False on last page."""
+    mock_tvdb.search = MagicMock(return_value=[])
+    mock_tvdb.get_req_links = MagicMock(
+        return_value={"page_size": 10, "total_items": 45, "next": None, "prev": "...", "self": "..."}
+    )
+    result = await client.search("doctor who", type_="series", offset=40, limit=10)
+    assert result["pagination"]["offset"] == 40
+    assert result["pagination"]["has_next"] is False
+
+
+@pytest.mark.asyncio
+async def test_search_pagination_cached(client, mock_tvdb) -> None:
+    """search pagination info is preserved in cached responses."""
+    mock_tvdb.search = MagicMock(return_value=[{"id": 1, "name": "Test"}])
+    mock_tvdb.get_req_links = MagicMock(
+        return_value={"page_size": 10, "total_items": 25, "next": "url", "prev": None, "self": "url"}
+    )
+    result1 = await client.search("doctor who", type_="series", offset=0, limit=10)
+    assert result1["pagination"]["has_next"] is True
+
+    result2 = await client.search("doctor who", type_="series", offset=0, limit=10)
+    assert result2["pagination"]["has_next"] is True
+    assert result2["pagination"]["total_items"] == 25
 
 
 # ======================================================================

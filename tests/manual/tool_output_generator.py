@@ -106,9 +106,9 @@ async def run_tests() -> int:
 
     # 1. Search for Reacher to get series ID
     print("\nSearching for Reacher...")
-    results = await tools.tvdb_search(query="Reacher", type="series", limit=5)
-    save_json("reacher_search", results)
-    for r in results:
+    search_result = await tools.tvdb_search(query="Reacher", type="series", limit=5)
+    save_json("reacher_search", search_result)
+    for r in search_result["results"]:
         if r.get("type") == "series" and "reacher" in r.get("name", "").lower():
             reacher_series_id = strip_id_prefix(r["id"])
             break
@@ -119,9 +119,9 @@ async def run_tests() -> int:
 
     # 2. Search for Matrix movie to get movie ID
     print("Searching for Matrix...")
-    results = await tools.tvdb_search(query="The Matrix", type="movie", limit=5)
-    save_json("matrix_search", results)
-    for r in results:
+    search_result = await tools.tvdb_search(query="The Matrix", type="movie", limit=5)
+    save_json("matrix_search", search_result)
+    for r in search_result["results"]:
         if r.get("type") == "movie" and "matrix" in r.get("name", "").lower():
             matrix_movie_id = strip_id_prefix(r["id"])
             break
@@ -284,11 +284,11 @@ async def run_tests() -> int:
     print("\nAdditional search/episodes:")
     await run_tool("search_matrix_general", tools.tvdb_search, query="Matrix")
     await run_tool(
-        "series_reacher_episodes_page1",
+        "series_tng_episodes_page0",
         tools.tvdb_get_series_episodes,
-        reacher_series_id,
+        71470,
         season_type="default",
-        page=1,
+        page=0,
     )
 
     print("\n" + "=" * 60)

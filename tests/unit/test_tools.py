@@ -52,7 +52,12 @@ def make_mock_client():
     mock.get_artwork_extended = AsyncMock(return_value={"id": 1, "name": "Artwork 1"})
     mock.get_episode_extended = AsyncMock(return_value={"id": 1, "name": "Episode 1"})
     mock.get_person_extended = AsyncMock(return_value={"id": 1, "name": "Person 1"})
-    mock.search = AsyncMock(return_value=[{"id": 1, "name": "Test"}])
+    mock.search = AsyncMock(
+        return_value={
+            "results": [{"id": 1, "name": "Test"}],
+            "pagination": {"offset": 0, "limit": 10, "total_items": 1, "has_next": False},
+        }
+    )
     return mock
 
 
@@ -263,7 +268,8 @@ async def test_search_calls_client(patched_tools) -> None:
         director=None,
         remote_id=None,
     )
-    assert len(result) == 1
+    assert len(result["results"]) == 1
+    assert result["pagination"]["total_items"] == 1
 
 
 @pytest.mark.asyncio

@@ -99,6 +99,33 @@ class TvdbClient:
                 record[field] = t[value_key]
                 return
 
+    def _extract_pagination_info(self, links: dict | None, current_page: int) -> dict:
+        """Extract user-friendly pagination info from TVDB links object."""
+        if not links:
+            return {"page": current_page, "has_next": False, "has_prev": False}
+
+        return {
+            "page": current_page,
+            "page_size": links.get("page_size", 0),
+            "total_items": links.get("total_items", 0),
+            "has_next": links.get("next") is not None,
+            "has_prev": links.get("prev") is not None,
+        }
+
+    def _extract_search_pagination_info(self, links: dict | None, offset: int, limit: int) -> dict:
+        """Extract pagination info for search results (offset/limit based)."""
+        if not links:
+            return {"offset": offset, "limit": limit, "total_items": 0, "has_next": False}
+
+        total_items = links.get("total_items", 0)
+        has_next = offset + limit < total_items
+        return {
+            "offset": offset,
+            "limit": limit,
+            "total_items": total_items,
+            "has_next": has_next,
+        }
+
     def _apply_include_filters(self, data: Any, **filters) -> Any:
         """Recursively apply include_* filters to nested TVDB response data."""
         include_tags = filters.get("include_tags", True)
@@ -339,6 +366,10 @@ class TvdbClient:
         async with self._rate_limiter:
             result = self._tvdb.get_series_episodes(series_id, **params)
 
+        # Retrieve pagination links from the last request
+        links = self._tvdb.get_req_links()
+        result["pagination"] = self._extract_pagination_info(links, page)
+
         result = self._translate_and_strip(result)
         tvdb_cache.set(cache_key, result)
         return copy.deepcopy(result)
@@ -576,7 +607,7 @@ class TvdbClient:
         country: str | None = None,
         director: str | None = None,
         remote_id: str | None = None,
-    ) -> list:
+    ) -> dict:
         """Search TVDB with optional filtering parameters."""
         cache_key = (
             f"search:{query}:{type_}:{year}:{offset}:{limit}:{primary_language}:{country}:{director}:{remote_id}"
@@ -604,5 +635,13 @@ class TvdbClient:
             results = self._tvdb.search(query, **params)
 
         results = self._translate_and_strip(results)
-        tvdb_cache.set(cache_key, results)
-        return copy.deepcopy(results)
+
+        # Include pagination metadata
+        links = self._tvdb.get_req_links()
+        response = {
+            "results": results,
+            "pagination": self._extract_search_pagination_info(links, offset, limit),
+        }
+
+        tvdb_cache.set(cache_key, response)
+        return copy.deepcopy(response)

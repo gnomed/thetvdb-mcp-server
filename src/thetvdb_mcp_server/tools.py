@@ -123,7 +123,7 @@ async def tvdb_search(
     country: str | None = None,
     director: str | None = None,
     remote_id: str | None = None,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Search TVDB for series, movies, people, and more.
 
     Searches by title, alias, and translation. Returns up to `limit`
@@ -157,7 +157,8 @@ async def tvdb_search(
             IMDB ID, EIDR, or other remote identifiers.
 
     Returns:
-        List of unfiltered search result objects.
+        Object with `results` (list of search results) and `pagination`
+        (object with offset, limit, total_items, has_next).
     """
     if _client is None:
         raise RuntimeError("init_tools() must be called before using TVDB tools")
@@ -197,7 +198,9 @@ async def tvdb_get_series_episodes(
         lang: 3-character ISO 639-2 language code (e.g. "eng").
 
     Returns:
-        Episodes response containing `series` and `episodes` keys.
+        Episodes response containing `series`, `episodes`, and `pagination` keys.
+        The `pagination` object includes `page`, `page_size`, `total_items`,
+        `has_next`, and `has_prev` to help with pagination.
     """
     if _client is None:
         raise RuntimeError("init_tools() must be called before using TVDB tools")

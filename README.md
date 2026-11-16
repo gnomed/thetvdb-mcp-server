@@ -181,11 +181,11 @@ Copy and adapt this prompt to give your AI assistant clear guidance on using the
 
 | Tool | Description |
 |---|---|
-| `tvdb_search` | Search TVDB for series, movies, people, and companies. Returns up to 10 results by default. |
+| `tvdb_search` | Search TVDB for series, movies, people, and companies. Returns up to 10 results by default. Response includes `results` array and `pagination` object with `offset`, `limit`, `total_items`, `has_next`. |
 | `tvdb_get_movie` | Fetch a movie record. Optional include_* params (default false): characters, artworks, trailers, lists, tags, contentRatings, remoteIds, companies, awards, releases. |
 | `tvdb_get_movie_by_slug` | Fetch a movie record by its slug (e.g. "the-lord-of-the-rings-the-fellowship-of-the-ring"). |
 | `tvdb_get_series` | Fetch a series record. Optional include_* params (default false): characters, artworks, trailers, lists, tags, contentRatings, remoteIds, seasons, companies. |
-| `tvdb_get_series_episodes` | Fetch all episodes for a series. Returns ALL episodes; filter client-side. |
+| `tvdb_get_series_episodes` | Fetch episodes for a series. Supports pagination via `page` param. Returns `pagination` object with `page`, `page_size`, `total_items`, `has_next`, `has_prev`. |
 | `tvdb_get_series_by_slug` | Fetch a series record by its slug (e.g. "doctor-who"). |
 | `tvdb_get_season` | Fetch a season record by its numeric TVDB ID. Optional include_* params (default false): artworks, companies, episodes, trailers, tags. |
 | `tvdb_get_artwork` | Fetch an artwork record by its numeric TVDB ID. |
